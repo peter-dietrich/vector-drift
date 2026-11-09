@@ -521,6 +521,7 @@ final class DriftScene: SKScene {
     private var lastTime: TimeInterval = 0
     private var elapsed: CGFloat = 0
     private var lastFire: CGFloat = -2
+    private var ammo = AmmoReserve()
     private var lastWarp: CGFloat = -10
     private var protectedUntil: CGFloat = 0
     private var heading: CGFloat = 0
@@ -558,6 +559,8 @@ final class DriftScene: SKScene {
     private let beltCaption = SKLabelNode(fontNamed: "Menlo")
     private let beltValue = SKLabelNode(fontNamed: "Menlo-Bold")
     private let difficultyReadout = SKLabelNode(fontNamed: "Menlo")
+    private let ammoReadout = SKLabelNode(fontNamed: "Menlo-Bold")
+    private let ammoStatus = SKLabelNode(fontNamed: "Menlo")
     private let telemetryRuleOne = SKShapeNode(rectOf: CGSize(width: 210, height: 0.7))
     private let telemetryRuleTwo = SKShapeNode(rectOf: CGSize(width: 210, height: 0.7))
     private let stageHeading = SKLabelNode(fontNamed: "Menlo-Bold")
@@ -597,11 +600,12 @@ final class DriftScene: SKScene {
         let telemetryLabels = [
             leftHeading, scoreCaption, hud, leftFootnote,
             waveCaption, waveValue, beltCaption, beltValue,
-            rightHeading, statusHUD, rightFootnote, difficultyReadout
+            rightHeading, statusHUD, rightFootnote, difficultyReadout,
+            ammoReadout, ammoStatus
         ]
         for label in telemetryLabels {
             label.zPosition = 90
-            label.horizontalAlignmentMode = .left
+            label.horizontalAlignmentMode = .right
             label.verticalAlignmentMode = .top
             addChild(label)
         }
@@ -632,7 +636,9 @@ final class DriftScene: SKScene {
         statusHUD.fontSize = 15
         rightFootnote.fontSize = 11
         difficultyReadout.fontSize = 10
-        for label in [leftFootnote, rightFootnote, difficultyReadout] {
+        ammoReadout.fontSize = 14
+        ammoStatus.fontSize = 9
+        for label in [leftFootnote, rightFootnote, difficultyReadout, ammoStatus] {
             label.fontColor = muted
         }
         stageHeading.fontSize = 8.5
@@ -724,6 +730,7 @@ final class DriftScene: SKScene {
         held.removeAll()
         score = 0; lives = customRules?.startingLives ?? difficulty.startingLives; wave = 1
         elapsed = 0; lastTime = 0; lastFire = -2; lastWarp = -10
+        ammo = AmmoReserve()
         stopped = false; over = false
         titleVisible = false
         scoreRecorded = false
@@ -845,6 +852,8 @@ final class DriftScene: SKScene {
         ArcadeEffects.updateShield(shieldNode, modern: modern,
                                    remaining: shieldActive ? shieldEnergy : 0,
                                    total: difficulty.shieldDuration)
+        ammo.update(dt: dt, secondsSinceShot: elapsed - lastFire,
+                    triggerHeld: held.contains(49))
         updateHud()
 
         if held.contains(123) { heading += 3.7 * dt }
@@ -868,7 +877,7 @@ final class DriftScene: SKScene {
 
         if held.contains(49) &&
             elapsed - lastFire > CGFloat(customRules?.shotInterval ?? Double(difficulty.shootCooldown)) &&
-            lasers.count < (customRules?.maxBullets ?? 6) {
+            lasers.count < (customRules?.maxBullets ?? 6) && ammo.fire() {
             lastFire = elapsed
             ArcadeAudio.shared.play(.fire)
             let bullet = SKShapeNode(circleOfRadius: 2)
@@ -1355,6 +1364,8 @@ final class DriftScene: SKScene {
         rightFootnote.text = shieldStatus
         difficultyReadout.text = "MODE  " + difficulty.title.uppercased() +
             (nuclearMissile == nil ? "" : "  ·  MISSILE AWAY")
+        ammoReadout.text = String(format: "ROUNDS  %04d / 1000", ammo.rounds)
+        ammoStatus.text = ammo.rechargeStatus(secondsSinceShot: elapsed - lastFire)
     }
 
     private func updateStyle() {
@@ -1382,6 +1393,7 @@ final class DriftScene: SKScene {
             : SKColor(calibratedWhite: 0.8, alpha: 0.16)
         waveValue.fontColor = color
         beltValue.fontColor = color
+        ammoReadout.fontColor = color
         for rock in boulders {
             styleRock(rock.node, detail: rock.detail)
             rock.surface.isHidden = !modern
@@ -2019,7 +2031,8 @@ final class DriftScene: SKScene {
                                  remaining: Double($0.remaining))
             }, timeSinceBlackHole: Double(elapsed - lastBlackHole),
             nextBlackHoleDelay: Double(nextBlackHoleDelay),
-            missilesRemaining: missilesRemaining, missile: missileState
+            missilesRemaining: missilesRemaining, missile: missileState,
+            ammoReserve: ammo
         )
     }
 
@@ -2054,6 +2067,7 @@ final class DriftScene: SKScene {
         shieldRechargeRemaining = CGFloat(snapshot.shieldCooldownRemaining)
         shieldNode.isHidden = !shieldActive
         lastFire = elapsed - CGFloat(snapshot.timeSinceShot)
+        ammo = snapshot.ammoReserve ?? AmmoReserve()
         lastWarp = elapsed - CGFloat(snapshot.timeSinceWarp)
         lastComet = elapsed - CGFloat(snapshot.timeSinceComet)
         nextCometDelay = CGFloat(snapshot.nextCometDelay)
