@@ -29,19 +29,21 @@ A GitHub Actions macOS build runs on pushes to `main` and pull requests. This is
 
 Click inside the playfield for keyboard focus.
 
-## v0.5 features (timed asteroid fractures and enhanced Modern Vector)
+## v0.6 features (textured asteroid rendering, renewable shields and HUD redesign)
 
 - Two graphics modes, with distinct procedural graphics and effects
 - Three difficulty settings independent of graphics mode
-- Finite shields available in *both* modes. Toggle with S and save remaining energy by turning them off. Energy replenishes at the start of each wave.
+- **Unlimited reusable shields** in both modes: S activates a timed shield, and S again ends it early and starts recharge. After 7 seconds on Easy / 5 on Medium / 3 on Hard, the shield automatically expires. Recharge takes 5 / 7 / 9 seconds respectively, then the shield becomes ready to activate again. Shield timer and recharge both pause with gameplay.
 - Incoming asteroids bounce off an active shield, retaining their health and splitting behavior. Larger rocks now push the ship backward harder and cause a visibly stronger, flexing shield ripple with extra Modern Vector particles.
 - Holding thrust plays a low continuous synthesized engine roar, stopping promptly when thrust stops, the window loses input focus, the game pauses, or sound is disabled.
 - Difficulty determines the number of asteroid sizes: **Easy three**, **Medium four**, **Hard five**. Each larger size is physically bigger and slower; fragments accelerate as they split.
 - Medium introduces single-hit size-4 rocks. Hard introduces size-4 two-hit rocks and enormous size-5 three-hit rocks; initial damage cracks appear without changing the rock's size, and the second hit on the largest tier adds a second crack.
 - Easy keeps its original starting count (3, +1 per wave, capped at 12). Medium begins with 4 (+1 per wave, capped at 13), while Hard begins with 7 (+2 per wave, capped at 19). These counts exclude fragments created by splitting.
 - On **Hard**, level-4 rocks take two shots and level-5 rocks take three. Each non-final hit adds visible damage without changing rock size. Final hits split rocks into two of the next smaller tier.
-- **NEW — timed fractures:** Once a multi-hit asteroid takes damage, it becomes unstable. The first hit starts a 10-second game-time countdown; a second nonfatal hit on a size-5 asteroid reduces the remaining countdown to at most 5 seconds. A final shot still splits it immediately. Expired asteroids split into two smaller rocks automatically, with no points awarded for the unattended breakup. Countdown pauses when the game is paused and resets on new child rocks.
-- **NEW — Modern Vector atmosphere:** added drifting parallax-style stars, denser rock ridges and mineral speckles, glowing damage flares, orange/red instability arcs, and multi-layer debris bursts with expanding plasma rings on splits. Classic stays visually restrained.
+- **Timed fractures on every difficulty:** the largest asteroid in Easy (size 3) and Medium (size 4) now takes two hits. Hard retains its existing size-4 two-hit and size-5 three-hit rocks. The first nonfatal hit starts a 10-second game-time countdown; a second nonfatal hit on a size-5 rock cuts the countdown to at most 5 seconds. A final shot splits immediately. Expired rocks split automatically without awarding points. Countdown pauses with the game and new fragments start undamaged.
+- **Modern graphics now use genuine shaded bitmap surfaces:** each asteroid has its own procedurally generated mineral texture with directional shading, craters, grit, raised ridges and dark fissures. This is no longer just wireframe art in Modern mode; Classic retains white vector shapes.
+- Modern's drifting stars, glowing damage flares, instability arcs and multi-layer debris remain available.
+- **Interface redesign:** separate title/actions and mode-selection rows, less crowded score/status HUD, clear shield READY / ACTIVE / RECHARGING indicator, and centered overlay behind title/game-over text. Classic stays visually restrained.
 - Comet special events in Modern and, on Hard, Classic; Hard comet intervals are much shorter
 - Comet shot creates an expanding asteroid-clearing shockwave and a 750-point bonus
 - Enemy UFO saucers with aimed shots, more accurate and frequent on Hard
@@ -61,21 +63,22 @@ Click inside the playfield for keyboard focus.
 | Minimum time between shots | 0.13 s | 0.16 s | 0.20 s |
 | Respawn protection | 3 s | 2 s | 1.25 s |
 | Hyperspace cooldown | 3 s | 4.5 s | 7 s |
-| **Shield energy per wave** | **7 s** | **5 s** | **3 s** |
+| Shield active duration | 7 s | 5 s | 3 s |
+| Shield recharge cooldown | 5 s | 7 s | 9 s |
 | Comet interval | 15–23 s | 11–18 s | 5–9 s |
 | UFO interval | 27–35 s | 19–27 s | 12–19 s |
 | Asteroid size tiers | 3 | 4 | 5 |
 | Starting rocks, wave 1 | 3 | 4 | 7 |
 | Added rocks per wave | +1 | +1 | +2 |
 | Maximum starting rocks per wave | 12 | 13 | 19 |
-| Giant hit points | N/A | size 4: 1 | size 4: 2; size 5: 3 |
-| Damaged rock fracture timer | N/A | N/A | 10s after first hit; at most 5s after second nonfatal hit |
+| Giant hit points | size 3: 2 | size 4: 2 | size 4: 2; size 5: 3 |
+| Damaged rock fracture timer | 10 s | 10 s | 10 s first hit, at most 5 s after second nonfatal hit |
 
 Comet and UFO spawns begin in wave 2. Classic mode only gets comet events on Hard. Switching difficulty starts a new game.
 
 ## Future improvements
 
-Modern Vector remains a procedural 2D style, now with surface facets, striations, glints, drifting stars, timed damage arcs and layered particle breakups. Longer-term improvements can use Metal shaders for true dynamic surface lighting, heat distortions and volumetric nebulae. Controller support, final sound design and release packaging remain open.
+Modern now composites procedural shaded asteroid sprites with vector overlays, plus drifting stars, timed damage arcs and layered particle breakups. Longer-term improvements can use Metal shaders for true dynamic surface lighting, heat distortions and volumetric nebulae. Controller support, final sound design and release packaging remain open.
 
 ## Licensing and release
 
