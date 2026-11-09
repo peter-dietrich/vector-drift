@@ -32,6 +32,16 @@ A GitHub Actions macOS build runs on pushes to `main` and pull requests. This is
 
 Click inside the playfield for keyboard focus. In **3D Flight**, left/right arrows yaw, **I/K** pitch, **Q/E** roll, **W/X** rise/dive, **A/D** strafe; Up thrusts forward and Down reverses. Space fires, S shields and N launches a missile.
 
+## v0.14 — Compact right-aligned telemetry and regenerative ammunition
+
+- **Right-side telemetry is about 15% smaller:** narrower translucent panel, shorter vertical footprint and smaller font rendering, with every metric and heading right-aligned to a common edge.
+- **Ammo reserve:** start each new game with 1,000 rounds. Each Space-key projectile consumes one round. Existing custom `Max Bullets` rules still control simultaneous projectiles and are independent of magazine size.
+- **Self-recharging:** after five seconds without firing, ammunition automatically refills at 100 rounds per second, stopping at 1,000. Shooting interrupts the refill and resets the five-second idle timer. Holding the Space key while out of ammo does not replenish the magazine.
+- **Telemetry:** rounds remaining and capacity, with a countdown during the five-second delay and a refilling/full indicator.
+- **All modes:** ammunition applies to Classic, Modern and 3D Flight; the vertical ammo readout is displayed in Classic and Modern 2D. 3D Flight's separate HUD has not yet received the same layout.
+- **Save/Resume:** ammo quantity and partial refill progress are preserved in 2D and 3D checkpoints. Older saves without ammo data continue loading and receive a full magazine.
+- **Gameplay clock:** ammunition recharge pauses with the game, and no longer resets when a wave advances. A new game starts fully loaded.
+
 ## v0.13 — Right-side vertical telemetry
 
 - **Single telemetry column in 2D:** removes the twin top-corner panels and consolidates flight telemetry and combat information into one narrow, approximately 252-point-wide right-hand readout.
