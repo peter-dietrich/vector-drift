@@ -513,7 +513,7 @@ final class DriftScene: SKScene {
     private var shieldEnergy: CGFloat = 0
     private var shieldRechargeRemaining: CGFloat = 0
     private let shieldNode = ArcadeEffects.shield()
-    private var backgroundLayer: ModernCinematicSky?
+    private var backgroundLayer: VectorNebulaField?
     private var lastBeltSpawn: CGFloat = 0
     private let modernShipDetail = ModernVisuals.shipDetail()
     private let flame = ModernVisuals.engineFlame()
@@ -1249,7 +1249,7 @@ final class DriftScene: SKScene {
         backgroundLayer?.removeFromParent()
         backgroundLayer = nil
         if modern {
-            let layer = ModernCinematicSky(size: size)
+            let layer = VectorNebulaField(size: size)
             addChild(layer)
             backgroundLayer = layer
             layer.animate(time: elapsed, density: beltDensity(at: elapsed),
