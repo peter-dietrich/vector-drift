@@ -122,21 +122,35 @@ private struct GameWindow: View {
                 Text("VECTOR DRIFT")
                     .font(.system(.headline, design: .monospaced))
                 Spacer()
-                Picker("Difficulty", selection: $difficulty) {
-                    ForEach(Difficulty.allCases) { level in Text(level.title).tag(level.rawValue) }
+                HStack(spacing: 3) {
+                    ForEach(Difficulty.allCases) { level in
+                        Button(level.title) { difficulty = level.rawValue }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(difficulty == level.rawValue ? Color.black : Color.white)
+                            .frame(width: 67, height: 28)
+                            .background(difficulty == level.rawValue
+                                        ? Color.cyan : Color(white: 0.28))
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                            .overlay(RoundedRectangle(cornerRadius: 6)
+                                .strokeBorder(Color.white.opacity(0.38), lineWidth: 1))
+                    }
                 }
-                .pickerStyle(.segmented)
-                .frame(width: 255)
-                .environment(\.colorScheme, .dark)
-                .tint(.cyan)
-                .help("Changing difficulty starts a new game")
-                Picker("Graphics", selection: $mode) {
-                    ForEach(Look.allCases) { look in Text(look.title).tag(look.rawValue) }
+                .help("Difficulty: changing this starts a new game")
+                HStack(spacing: 3) {
+                    ForEach(Look.allCases) { look in
+                        Button(look.title) { mode = look.rawValue }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(mode == look.rawValue ? Color.black : Color.white)
+                            .frame(width: look == .classic ? 66 : 116, height: 28)
+                            .background(mode == look.rawValue
+                                        ? Color.cyan : Color(white: 0.28))
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                            .overlay(RoundedRectangle(cornerRadius: 6)
+                                .strokeBorder(Color.white.opacity(0.38), lineWidth: 1))
+                    }
                 }
-                .pickerStyle(.segmented)
-                .frame(width: 260)
-                .environment(\.colorScheme, .dark)
-                .tint(.cyan)
                 Toggle("Sound", isOn: $soundEnabled)
                     .toggleStyle(.checkbox)
                 Button("Scores") { showScores = true }
@@ -519,8 +533,10 @@ final class DriftScene: SKScene {
                     boulders[j].node.lineWidth = 3
                     boulders[j].node.strokeColor = modern ? ModernVisuals.fire : .yellow
                     ArcadeAudio.shared.play(.rock)
-                    ModernVisuals.burst(in: self, at: boulders[j].node.position,
-                                        color: modern ? ModernVisuals.fire : .yellow, count: 7)
+                    if modern {
+                        ModernVisuals.burst(in: self, at: boulders[j].node.position,
+                                            color: ModernVisuals.fire, count: 7)
+                    }
                     continue
                 }
                 let rock = boulders.remove(at: j)
