@@ -530,6 +530,178 @@ final class DriftScene: SKScene {
         }
     }
 
+    private func styleRock(_ node: SKShapeNode, detail: SKNode) {
+        detail.isHidden = !modern
+        node.strokeColor = modern ? ModernVisuals.ice : .white
+        node.fillColor = modern ? ModernVisuals.rock : .clear
+        node.glowWidth = modern ? 5 : 0
+    }
+
+    private func award(_ amount: Int) {
+        score += amount
+        if score > high {
+            high = score
+            UserDefaults.standard.set(high, forKey: "highScore")
+        }
+        updateHud()
+    }
+
+    private func clearSpecialEffects() {
+        comet?.node.removeFromParent()
+        comet = nil
+        for wave in shockwaves { wave.ring.removeFromParent() }
+        shockwaves.removeAll()
+        children.filter { $0.name == "modernEffect" }.forEach { $0.removeFromParent() }
+    }
+
+    /// A short yellow impact flash and an original ship-breaking animation.
+    /// Both effects are implemented with SpriteKit shapes; no external art assets.
+    private func shipImpact() {
+        let position = ship.position
+
+        let flash = SKShapeNode(rectOf: CGSize(width: max(size.width, 1),
+                                                height: max(size.height, 1)))
+        flash.position = CGPoint(x: size.width / 2, y: size.height / 2)
+        flash.fillColor = modern
+            ? SKColor(calibratedRed: 1, green: 0.57, blue: 0.16, alpha: 0.52)
+            : SKColor(calibratedRed: 1, green: 0.91, blue: 0.10, alpha: 0.68)
+        flash.strokeColor = .clear
+        flash.zPosition = 50
+        addChild(flash)
+        flash.run(.sequence([.fadeOut(withDuration: 0.21), .removeFromParent()]))
+
+        ship.isHidden = true
+        let shards: [(CGPoint, CGPoint)] = [
+            (CGPoint(x: 0, y: 19), CGPoint(x: -12, y: -12)),
+            (CGPoint(x: -12, y: -12), CGPoint(x: 0, y: -7)),
+            (CGPoint(x: 0, y: -7), CGPoint(x: 12, y: -12)),
+            (CGPoint(x: 12, y: -12), CGPoint(x: 0, y: 19))
+        ]
+        for (start, end) in shards {
+            let p = CGMutablePath()
+            p.move(to: start)
+            p.addLine(to: end)
+            let fragment = SKShapeNode(path: p)
+            fragment.position = position
+            fragment.zRotation = heading
+            fragment.strokeColor = modern ? ModernVisuals.fire : .yellow
+            fragment.lineWidth = 2.5
+            fragment.glowWidth = modern ? 8 : 1
+            fragment.zPosition = 12
+            addChild(fragment)
+            let angle = CGFloat.random(in: 0...(2 * .pi))
+            let duration = Double.random(in: 0.55...0.9)
+            let distance = CGFloat.random(in: 40...130)
+            fragment.run(.sequence([
+                .group([
+                    .moveBy(x: cos(angle) * distance,
+                            y: sin(angle) * distance, duration: duration),
+                    .rotate(byAngle: CGFloat.random(in: -5...5), duration: duration),
+                    .fadeOut(withDuration: duration)
+                ]),
+                .removeFromParent()
+            ]))
+        }
+        if modern {
+            ModernVisuals.burst(in: self, at: position,
+                                color: ModernVisuals.fire, count: 22)
+        }
+        if lives > 0 {
+            ship.run(.sequence([.wait(forDuration: 0.85), .run { [weak self] in
+                guard let self, !self.over else { return }
+                self.ship.isHidden = false
+            }]))
+        }
+    }
+
+    private func updateComet(_ dt: CGFloat) {
+        if comet == nil && wave >= 2 && elapsed - lastComet >= nextCometDelay {
+            spawnComet()
+        }
+        guard var active = comet else { return }
+        active.remaining -= dt
+        active.node.position.x += active.velocity.dx * dt
+        active.node.position.y += active.velocity.dy * dt
+
+        if elapsed >= nextSpark {
+            nextSpark = elapsed + 0.075
+            ModernVisuals.cometSpark(in: self, at: active.node.position,
+                                     direction: active.velocity)
+        }
+
+        if active.remaining <= 0 ||
+           active.node.position.x < -300 ||
+           active.node.position.x > size.width + 300 {
+            active.node.removeFromParent()
+            comet = nil
+            lastComet = elapsed
+            nextCometDelay = CGFloat.random(in: 14...23)
+        } else {
+            comet = active
+        }
+    }
+
+    private func spawnComet() {
+        let fromLeft = Bool.random()
+        let direction: CGFloat = fromLeft ? 1 : -1
+        let node = ModernVisuals.cometNode()
+        node.position = CGPoint(
+            x: fromLeft ? -45 : size.width + 45,
+            y: CGFloat.random(in: (size.height * 0.16)...(size.height * 0.84))
+        )
+        let vy = CGFloat.random(in: -34...34)
+        let speed = CGFloat.random(in: 180...235) * difficulty.speedMultiplier
+        let v = CGVector(dx: direction * speed, dy: vy)
+        node.zRotation = atan2(vy, v.dx)
+        addChild(node)
+        comet = Comet(node: node, velocity: v, remaining: (size.width + 140) / speed + 1)
+    }
+
+    private func detonateComet(at point: CGPoint) {
+        comet?.node.removeFromParent()
+        comet = nil
+        lastComet = elapsed
+        nextCometDelay = CGFloat.random(in: 17...27)
+
+        award(750)
+        ModernVisuals.floatScore("COMET +750", in: self, at: point)
+        ModernVisuals.burst(in: self, at: point, color: ModernVisuals.fire, count: 42)
+
+        let ring = ModernVisuals.shockRing(at: point)
+        addChild(ring)
+        shockwaves.append(Shockwave(center: point, elapsed: 0,
+                                    ring: ring, hit: Set<ObjectIdentifier>()))
+    }
+
+    private func updateShockwaves(_ dt: CGFloat) {
+        for i in shockwaves.indices.reversed() {
+            shockwaves[i].elapsed += dt
+            let progress = min(shockwaves[i].elapsed / 0.95, 1)
+            let radius: CGFloat = 350 * progress
+            shockwaves[i].ring.setScale(max(0.01, radius / 12))
+            shockwaves[i].ring.alpha = 1 - progress
+
+            for j in boulders.indices.reversed() {
+                let rock = boulders[j]
+                let identity = ObjectIdentifier(rock.node)
+                guard !shockwaves[i].hit.contains(identity) else { continue }
+                let distance = hypot(rock.node.position.x - shockwaves[i].center.x,
+                                     rock.node.position.y - shockwaves[i].center.y)
+                guard distance < radius + rock.radius else { continue }
+                shockwaves[i].hit.insert(identity)
+                let removed = boulders.remove(at: j)
+                removed.node.removeFromParent()
+                award(removed.level == 3 ? 40 : removed.level == 2 ? 100 : 200)
+                ModernVisuals.burst(in: self, at: removed.node.position,
+                                    color: ModernVisuals.ice, count: 11)
+            }
+
+            if progress >= 1 {
+                shockwaves.remove(at: i).ring.removeFromParent()
+            }
+        }
+    }
+
     private func wrapped(_ p: CGPoint, margin: CGFloat) -> CGPoint {
         var result = p
         if result.x < -margin { result.x = size.width + margin }
