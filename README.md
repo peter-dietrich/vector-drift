@@ -23,16 +23,19 @@ A GitHub Actions macOS build runs on pushes to `main` and pull requests. This is
 | **S** | Toggle shield on/off, using a limited energy budget |
 | Down arrow | Hyperspace (cooldown varies by difficulty) |
 | P | Pause/resume |
+| Hold Up arrow | Continuous engine-thrust rumble while accelerating |
 | R or Command-R | Restart |
 | Toolbar | Choose graphics, difficulty, toggle sound, see scores |
 
 Click inside the playfield for keyboard focus.
 
-## v0.3 features
+## v0.3 features (thrust and shield-bounce update)
 
 - Two graphics modes, with distinct procedural graphics and effects
 - Three difficulty settings independent of graphics mode
 - Finite shields available in *both* modes. Toggle with S and save remaining energy by turning them off. Energy replenishes at the start of each wave.
+- Incoming asteroids bounce off an active shield, retaining their health and splitting behavior; a brief ripple and impact tone confirm contact.
+- Holding thrust plays a low continuous synthesized engine roar, stopping promptly when thrust stops, the window loses input focus, the game pauses, or sound is disabled.
 - Large, medium, and small asteroids move at different speeds; waves gradually accelerate
 - On **Hard from wave 2**, giant slow-moving asteroids require two hits. The first reveals yellow/orange damage cracks **without shrinking the asteroid**. The second breaks it into smaller asteroids.
 - Comet special events in Modern and, on Hard, Classic; Hard comet intervals are much shorter

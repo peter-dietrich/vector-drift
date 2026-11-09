@@ -250,6 +250,7 @@ private struct Boulder {
     var detail: SKNode
     var hitPoints: Int
     var crack: SKShapeNode
+    var lastShieldImpact: CGFloat
 }
 private struct Laser {
     var node: SKShapeNode
@@ -359,6 +360,7 @@ final class DriftScene: SKScene {
     }
 
     func restart() {
+        ArcadeAudio.shared.stopThrust()
         guard ready else { return }
         boulders.forEach { $0.node.removeFromParent() }
         lasers.forEach { $0.node.removeFromParent() }
@@ -401,9 +403,13 @@ final class DriftScene: SKScene {
         velocity = .zero
     }
 
-    func clearKeys() { held.removeAll() }
+    func clearKeys() {
+        held.removeAll()
+        ArcadeAudio.shared.stopThrust()
+    }
 
     private func showTitle() {
+        ArcadeAudio.shared.stopThrust()
         titleVisible = true
         over = false
         message.text = "VECTOR DRIFT · PRESS RETURN"
@@ -428,6 +434,7 @@ final class DriftScene: SKScene {
         case 35: // P
             if !over {
                 stopped.toggle()
+                if stopped { ArcadeAudio.shared.stopThrust() }
                 message.text = stopped ? "PAUSED" : ""
             }
         case 15: restart() // R
@@ -439,7 +446,10 @@ final class DriftScene: SKScene {
     override func update(_ currentTime: TimeInterval) {
         let dt = lastTime == 0 ? CGFloat(1.0 / 60) : CGFloat(min(max(currentTime - lastTime, 0), 1.0 / 30))
         lastTime = currentTime
-        guard ready && !over && !stopped && !titleVisible else { return }
+        guard ready && !over && !stopped && !titleVisible else {
+            ArcadeAudio.shared.stopThrust()
+            return
+        }
         elapsed += dt
         if shieldActive {
             shieldEnergy = max(0, shieldEnergy - dt)
@@ -456,14 +466,16 @@ final class DriftScene: SKScene {
         if held.contains(123) { heading += 3.7 * dt }
         if held.contains(124) { heading -= 3.7 * dt }
         let forward = CGVector(dx: -sin(heading), dy: cos(heading))
-        if held.contains(126) {
+        let thrusting = held.contains(126) && !ship.isHidden
+        ArcadeAudio.shared.setThrust(thrusting)
+        if thrusting {
             velocity.dx += forward.dx * 265 * dt
             velocity.dy += forward.dy * 265 * dt
             let speed = hypot(velocity.dx, velocity.dy)
             if speed > 440 { velocity.dx *= 440 / speed; velocity.dy *= 440 / speed }
         }
         ship.zRotation = heading
-        flame.isHidden = !modern || !held.contains(126)
+        flame.isHidden = !modern || !thrusting
         flame.yScale = CGFloat.random(in: 0.75...1.25)
         ship.position = wrapped(CGPoint(x: ship.position.x + velocity.dx * dt,
                                         y: ship.position.y + velocity.dy * dt), margin: 15)
@@ -490,6 +502,12 @@ final class DriftScene: SKScene {
                 margin: boulders[i].radius)
             boulders[i].node.zRotation += boulders[i].spin * dt
         }
+        // Shield contact reflects incoming asteroids instead of merely allowing
+        // them to overlap the protected ship. It does not destroy the rock.
+        if shieldActive && !ship.isHidden {
+            bounceShieldAsteroids()
+        }
+
         for i in lasers.indices {
             lasers[i].remaining -= dt
             lasers[i].node.position = wrapped(CGPoint(
@@ -573,6 +591,7 @@ final class DriftScene: SKScene {
                       $0.node.position.y - ship.position.y) < 34
             } ?? false)) {
             lives -= 1
+            ArcadeAudio.shared.stopThrust()
             shieldActive = false
             shieldNode.isHidden = true
             ArcadeAudio.shared.play(.ship)
@@ -597,6 +616,72 @@ final class DriftScene: SKScene {
             ArcadeAudio.shared.play(.wave)
             protectedUntil = elapsed + 1.5
             updateHud()
+        }
+    }
+
+    /// Detects the shield's outer radius and redirects each rock's relative
+    /// velocity outward along the contact normal. Separation prevents repeated
+    /// collision sounds or rocks sticking to the shield.
+    private func bounceShieldAsteroids() {
+        let shieldRadius: CGFloat = 32
+        for index in boulders.indices {
+            let rock = boulders[index]
+            let dx = rock.node.position.x - ship.position.x
+            let dy = rock.node.position.y - ship.position.y
+            let distance = hypot(dx, dy)
+            let minimumDistance = shieldRadius + rock.radius
+            guard distance < minimumDistance else { continue }
+
+            // When centers coincide, choose a stable normal along the ship's nose.
+            let normalX = distance > 0.001 ? dx / distance : -sin(heading)
+            let normalY = distance > 0.001 ? dy / distance : cos(heading)
+            rock.node.position = CGPoint(
+                x: ship.position.x + normalX * (minimumDistance + 1),
+                y: ship.position.y + normalY * (minimumDistance + 1)
+            )
+
+            let relativeX = rock.velocity.dx - velocity.dx
+            let relativeY = rock.velocity.dy - velocity.dy
+            let approach = relativeX * normalX + relativeY * normalY
+            guard approach < 0 else { continue }
+
+            // Restitution is slightly greater than one for satisfying arcade bounce.
+            let restitution: CGFloat = 1.10
+            let reflectedX = relativeX - (1 + restitution) * approach * normalX
+            let reflectedY = relativeY - (1 + restitution) * approach * normalY
+            boulders[index].velocity = CGVector(
+                dx: velocity.dx + reflectedX,
+                dy: velocity.dy + reflectedY
+            )
+            if elapsed - rock.lastShieldImpact > 0.12 {
+                boulders[index].lastShieldImpact = elapsed
+                let hitPoint = CGPoint(
+                    x: ship.position.x + normalX * shieldRadius,
+                    y: ship.position.y + normalY * shieldRadius
+                )
+                shieldImpact(at: hitPoint)
+                ArcadeAudio.shared.play(.bounce)
+            }
+        }
+    }
+
+    private func shieldImpact(at point: CGPoint) {
+        let ripple = SKShapeNode(circleOfRadius: 8)
+        ripple.position = point
+        ripple.strokeColor = modern ? ModernVisuals.ice : .white
+        ripple.fillColor = .clear
+        ripple.lineWidth = 2.4
+        ripple.glowWidth = modern ? 9 : 0
+        ripple.zPosition = 11
+        addChild(ripple)
+        ripple.run(.sequence([
+            .group([.scale(to: 2.8, duration: 0.27),
+                    .fadeOut(withDuration: 0.27)]),
+            .removeFromParent()
+        ]))
+        if modern {
+            ModernVisuals.burst(in: self, at: point,
+                                color: ModernVisuals.ice, count: 6)
         }
     }
 
@@ -673,7 +758,8 @@ final class DriftScene: SKScene {
         addChild(node)
         boulders.append(Boulder(node: node, velocity: velocity, radius: radius,
                                 level: level, spin: .random(in: -1.2...1.2), detail: detail,
-                                hitPoints: level == 4 ? 2 : 1, crack: crack))
+                                hitPoints: level == 4 ? 2 : 1, crack: crack,
+                                lastShieldImpact: -10))
         styleRock(node, detail: detail)
     }
 

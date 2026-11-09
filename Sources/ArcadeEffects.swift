@@ -104,32 +104,85 @@ enum ArcadeEffects {
 /// Lightweight procedurally generated arcade tones, played only when enabled.
 /// The engine owns the player node and keeps a bounded number of queued samples.
 final class ArcadeAudio {
-    enum Effect { case fire, rock, shield, comet, ship, saucer, wave }
+    enum Effect { case fire, rock, shield, bounce, comet, ship, saucer, wave }
     static let shared = ArcadeAudio()
-    var enabled = true
+    var enabled = true {
+        didSet { if !enabled { stopThrust() } }
+    }
 
     private let engine = AVAudioEngine()
     private let player = AVAudioPlayerNode()
+    private let thrustPlayer = AVAudioPlayerNode()
+    private var thrustPlaying = false
+    private lazy var thrustBuffer: AVAudioPCMBuffer? = makeThrustBuffer()
     private let format = AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 1)!
     private var started = false
 
     private init() {
         engine.attach(player)
+        engine.attach(thrustPlayer)
         engine.connect(player, to: engine.mainMixerNode, format: format)
+        engine.connect(thrustPlayer, to: engine.mainMixerNode, format: format)
+        thrustPlayer.volume = 0.45
         engine.mainMixerNode.outputVolume = 0.30
     }
 
-    func play(_ effect: Effect) {
-        guard enabled else { return }
-        if !started {
-            do {
-                try engine.start()
-                player.play()
-                started = true
-            } catch {
-                return // Audio is optional; gameplay must continue without it.
-            }
+    private func ensureEngine() -> Bool {
+        if started { return true }
+        do {
+            try engine.start()
+            player.play()
+            started = true
+            return true
+        } catch {
+            return false // Audio is optional; gameplay must continue without it.
         }
+    }
+
+    /// Continuous, looped rocket rumble, rather than 60 one-shot sounds per second.
+    /// Called from the game loop; does nothing when the state has not changed.
+    func setThrust(_ active: Bool) {
+        guard active && enabled else {
+            stopThrust()
+            return
+        }
+        guard !thrustPlaying else { return }
+        guard ensureEngine(), let buffer = thrustBuffer else { return }
+        thrustPlayer.scheduleBuffer(buffer, at: nil, options: [.loops], completionHandler: nil)
+        thrustPlayer.play()
+        thrustPlaying = true
+    }
+
+    func stopThrust() {
+        guard thrustPlaying else { return }
+        thrustPlayer.stop()
+        thrustPlaying = false
+    }
+
+    /// A deliberately synthetic layered rocket tone: low oscillator, rumble,
+    /// and filtered-sounding noise. Reusing one buffer keeps CPU cost low.
+    private func makeThrustBuffer() -> AVAudioPCMBuffer? {
+        let frames = AVAudioFrameCount(format.sampleRate * 0.45)
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames),
+              let samples = buffer.floatChannelData?.pointee else { return nil }
+        buffer.frameLength = frames
+        let count = Int(frames)
+        for i in 0..<count {
+            let t = Double(i) / format.sampleRate
+            // 55 Hz fundamental plus a weak harmonic and modulated turbulence.
+            let low = sin(2 * .pi * 55 * t) * 0.39
+            let harmonic = sin(2 * .pi * 110 * t) * 0.15
+            let pulsation = 0.68 + 0.16 * sin(2 * .pi * (1 / 0.45) * t)
+            let grit = Double.random(in: -1...1) * 0.23
+            // Smooth seam when the node loops the buffer.
+            let seam = min(1, Double(min(i, count - i - 1)) / 800)
+            samples[i] = Float((low + harmonic + grit) * pulsation * seam * 0.44)
+        }
+        return buffer
+    }
+
+    func play(_ effect: Effect) {
+        guard enabled && ensureEngine() else { return }
 
         let duration: Double
         let f0: Double
@@ -139,6 +192,7 @@ final class ArcadeAudio {
         case .fire: duration = 0.07; f0 = 780; f1 = 230; noise = 0.08
         case .rock: duration = 0.19; f0 = 160; f1 = 52; noise = 0.44
         case .shield: duration = 0.22; f0 = 350; f1 = 870; noise = 0.02
+        case .bounce: duration = 0.16; f0 = 260; f1 = 710; noise = 0.05
         case .comet: duration = 0.58; f0 = 240; f1 = 38; noise = 0.25
         case .ship: duration = 0.48; f0 = 280; f1 = 46; noise = 0.40
         case .saucer: duration = 0.15; f0 = 340; f1 = 650; noise = 0.04
