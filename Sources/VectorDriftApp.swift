@@ -544,7 +544,17 @@ final class DriftScene: SKScene {
     private let hud = SKLabelNode(fontNamed: "Menlo-Bold")
     private let statusHUD = SKLabelNode(fontNamed: "Menlo-Bold")
     private let message = SKLabelNode(fontNamed: "Menlo-Bold")
-    private let stagePanel = SKShapeNode(rectOf: CGSize(width: 440, height: 116), cornerRadius: 17)
+    private let leftPanel = SKShapeNode(rectOf: CGSize(width: 344, height: 98), cornerRadius: 8)
+    private let rightPanel = SKShapeNode(rectOf: CGSize(width: 354, height: 98), cornerRadius: 8)
+    private let leftAccent = SKShapeNode(rectOf: CGSize(width: 3, height: 79))
+    private let rightAccent = SKShapeNode(rectOf: CGSize(width: 3, height: 79))
+    private let leftHeading = SKLabelNode(fontNamed: "Menlo-Bold")
+    private let rightHeading = SKLabelNode(fontNamed: "Menlo-Bold")
+    private let leftFootnote = SKLabelNode(fontNamed: "Menlo")
+    private let rightFootnote = SKLabelNode(fontNamed: "Menlo")
+    private let stageHeading = SKLabelNode(fontNamed: "Menlo-Bold")
+    private let stageCaption = SKLabelNode(fontNamed: "Menlo")
+    private let stagePanel = SKShapeNode(rectOf: CGSize(width: 476, height: 134), cornerRadius: 9)
 
     override func didMove(to view: SKView) {
         guard !ready else { return }
@@ -557,12 +567,42 @@ final class DriftScene: SKScene {
         ship.addChild(modernShipDetail)
         ship.addChild(flame)
         ship.addChild(shieldNode)
-        hud.fontSize = 15
+        for panel in [leftPanel, rightPanel] {
+            panel.zPosition = 85
+            panel.fillColor = SKColor(calibratedWhite: 0.015, alpha: 0.70)
+            panel.strokeColor = SKColor(calibratedRed: 0.73, green: 0.63, blue: 0.48, alpha: 0.36)
+            panel.lineWidth = 0.8
+            addChild(panel)
+        }
+        for accent in [leftAccent, rightAccent] {
+            accent.zPosition = 87
+            accent.strokeColor = .clear
+            accent.fillColor = SKColor(calibratedRed: 1.0, green: 0.64, blue: 0.28, alpha: 0.90)
+            addChild(accent)
+        }
+        for label in [leftHeading, rightHeading, leftFootnote, rightFootnote, stageHeading, stageCaption] {
+            label.zPosition = 90
+            addChild(label)
+        }
+        for label in [leftHeading, rightHeading, stageHeading] {
+            label.fontSize = 11
+            label.fontColor = SKColor(calibratedRed: 1.0, green: 0.72, blue: 0.40, alpha: 1)
+        }
+        leftHeading.text = "VECTOR DRIFT   //   TELEMETRY"
+        rightHeading.text = "SYSTEMS   //   COMBAT STATUS"
+        stageHeading.text = "VECTOR DRIFT    /    FLIGHT SIM"
+        leftFootnote.fontSize = 10
+        rightFootnote.fontSize = 10
+        stageCaption.fontSize = 12
+        leftFootnote.fontColor = SKColor(calibratedWhite: 0.78, alpha: 0.95)
+        rightFootnote.fontColor = SKColor(calibratedWhite: 0.78, alpha: 0.95)
+        stageCaption.fontColor = SKColor(calibratedWhite: 0.85, alpha: 1)
+        hud.fontSize = 14
         hud.horizontalAlignmentMode = .left
         hud.verticalAlignmentMode = .top
         hud.zPosition = 90
         addChild(hud)
-        statusHUD.fontSize = 14
+        statusHUD.fontSize = 13
         statusHUD.horizontalAlignmentMode = .right
         statusHUD.verticalAlignmentMode = .top
         statusHUD.zPosition = 90
@@ -573,18 +613,47 @@ final class DriftScene: SKScene {
         stagePanel.lineWidth = 1.4
         stagePanel.isHidden = true
         addChild(stagePanel)
-        message.zPosition = 81
-        message.fontSize = 25
+        message.zPosition = 91
+        message.fontSize = 26
         message.horizontalAlignmentMode = .center
         addChild(message)
+        leftHeading.horizontalAlignmentMode = .left
+        leftFootnote.horizontalAlignmentMode = .left
+        rightHeading.horizontalAlignmentMode = .right
+        rightFootnote.horizontalAlignmentMode = .right
+        stageHeading.horizontalAlignmentMode = .center
+        stageCaption.horizontalAlignmentMode = .center
         showTitle()
     }
 
     override func didChangeSize(_ oldSize: CGSize) {
         backgroundLayer?.resize(to: size)
-        hud.position = CGPoint(x: 20, y: size.height - 20)
-        statusHUD.position = CGPoint(x: size.width - 20, y: size.height - 20)
-        message.position = CGPoint(x: size.width / 2, y: size.height / 2)
+        let inset: CGFloat = 16
+        let available = max(500, size.width)
+        let panelWidth: CGFloat = min(344, (available - 58) / 2)
+        // Move each panel toward its own corner. Compact text and slim borders
+        // preserve a large central corridor for shooting and flying.
+        let leftX = inset + panelWidth / 2
+        let rightX = size.width - inset - panelWidth / 2
+        leftPanel.position = CGPoint(x: leftX, y: size.height - 66)
+        rightPanel.position = CGPoint(x: rightX, y: size.height - 66)
+        leftPanel.path = CGPath(roundedRect: CGRect(x: -panelWidth/2, y: -49,
+                                                   width: panelWidth, height: 98),
+                                cornerWidth: 8, cornerHeight: 8, transform: nil)
+        rightPanel.path = CGPath(roundedRect: CGRect(x: -panelWidth/2, y: -49,
+                                                    width: panelWidth, height: 98),
+                                 cornerWidth: 8, cornerHeight: 8, transform: nil)
+        leftAccent.position = CGPoint(x: inset + 5, y: size.height - 66)
+        rightAccent.position = CGPoint(x: size.width - inset - 5, y: size.height - 66)
+        leftHeading.position = CGPoint(x: inset + 17, y: size.height - 40)
+        hud.position = CGPoint(x: inset + 17, y: size.height - 61)
+        leftFootnote.position = CGPoint(x: inset + 17, y: size.height - 97)
+        rightHeading.position = CGPoint(x: size.width - inset - 17, y: size.height - 40)
+        statusHUD.position = CGPoint(x: size.width - inset - 17, y: size.height - 61)
+        rightFootnote.position = CGPoint(x: size.width - inset - 17, y: size.height - 97)
+        message.position = CGPoint(x: size.width / 2, y: size.height / 2 + 1)
+        stageHeading.position = CGPoint(x: size.width / 2, y: size.height / 2 + 42)
+        stageCaption.position = CGPoint(x: size.width / 2, y: size.height / 2 - 39)
         stagePanel.position = CGPoint(x: size.width / 2, y: size.height / 2)
     }
 
@@ -629,6 +698,8 @@ final class DriftScene: SKScene {
         shieldNode.isHidden = true
         message.text = ""
         stagePanel.isHidden = true
+        stageHeading.isHidden = true
+        stageCaption.isHidden = true
         ArcadeAudio.shared.play(.wave)
         spawnWave()
         updateHud()
@@ -651,9 +722,13 @@ final class DriftScene: SKScene {
         ArcadeAudio.shared.stopThrust()
         titleVisible = true
         over = false
-        message.text = "VECTOR DRIFT  •  PRESS RETURN"
+        message.text = "VECTOR DRIFT"
+        stageHeading.text = "SIMULATION    //    ARCADE FLIGHT"
+        stageCaption.text = "PRESS RETURN TO BEGIN"
         stagePanel.isHidden = false
-        message.position = CGPoint(x: size.width / 2, y: size.height / 2)
+        stageHeading.isHidden = false
+        stageCaption.isHidden = false
+        message.position = CGPoint(x: size.width / 2, y: size.height / 2 + 1)
         updateHud()
         updateStyle()
     }
@@ -683,6 +758,13 @@ final class DriftScene: SKScene {
                 stopped.toggle()
                 if stopped { ArcadeAudio.shared.stopThrust() }
                 message.text = stopped ? "PAUSED" : ""
+                stagePanel.isHidden = !stopped
+                stageHeading.isHidden = !stopped
+                stageCaption.isHidden = !stopped
+                if stopped {
+                    stageHeading.text = "FLIGHT CONTROL    //    HOLD"
+                    stageCaption.text = "PRESS P TO RESUME"
+                }
             }
         case 15: restart() // R
         case 125: if !stopped && !over { hyperspace() }
@@ -890,8 +972,12 @@ final class DriftScene: SKScene {
             over = true
             ship.isHidden = true
             saveFinalScore()
-            message.text = "GAME OVER  •  PRESS RETURN"
+            message.text = "GAME OVER"
+            stageHeading.text = "FLIGHT TERMINATED    //    SIMULATION END"
+            stageCaption.text = "PRESS RETURN TO RESTART"
             stagePanel.isHidden = false
+            stageHeading.isHidden = false
+            stageCaption.isHidden = false
         } else {
             resetShip()
             protectedUntil = elapsed + difficulty.respawnProtection
@@ -1200,8 +1286,11 @@ final class DriftScene: SKScene {
     }
 
     private func updateHud() {
-        hud.text = String(format: "SCORE %06d     BEST %06d     WAVE %02d",
-                          score, high, wave)
+        hud.text = String(format: "SCORE %06d   BEST %06d", score, high)
+        let density = modern ? Int((beltDensity(at: elapsed) * 100).rounded()) : 0
+        leftFootnote.text = modern
+            ? String(format: "SECTOR %02d   WAVE %02d   BELT %02d%%", max(1, wave / 3 + 1), wave, density)
+            : String(format: "SECTOR %02d   WAVE %02d   CLASSIC", max(1, wave / 3 + 1), wave)
         let shieldStatus: String
         if shieldActive {
             shieldStatus = String(format: "SHIELD %.1fs", shieldEnergy)
@@ -1210,7 +1299,8 @@ final class DriftScene: SKScene {
         } else {
             shieldStatus = "SHIELD READY [S]"
         }
-        statusHUD.text = "LIVES \(lives)  NUKES \(missilesRemaining)  \(difficulty.title.uppercased())  \(shieldStatus)"
+        statusHUD.text = "LIVES \(lives)   NUKES \(missilesRemaining)   \(difficulty.title.uppercased())"
+        rightFootnote.text = shieldStatus + (nuclearMissile == nil ? "" : "   ·   MISSILE AWAY")
     }
 
     private func updateStyle() {
@@ -1227,7 +1317,13 @@ final class DriftScene: SKScene {
         stagePanel.fillColor = modern
             ? SKColor(calibratedRed: 0.018, green: 0.035, blue: 0.085, alpha: 0.95)
             : SKColor(calibratedWhite: 0.07, alpha: 0.95)
-        stagePanel.strokeColor = modern ? ModernVisuals.ice.withAlphaComponent(0.55) : .white
+        stagePanel.strokeColor = modern
+            ? SKColor(calibratedRed: 1, green: 0.67, blue: 0.34, alpha: 0.55) : .white
+        for panel in [leftPanel, rightPanel] {
+            panel.strokeColor = modern
+                ? SKColor(calibratedRed: 0.84, green: 0.68, blue: 0.44, alpha: 0.40)
+                : SKColor(calibratedWhite: 0.8, alpha: 0.35)
+        }
         for rock in boulders {
             styleRock(rock.node, detail: rock.detail)
             rock.surface.isHidden = !modern
@@ -1935,6 +2031,8 @@ final class DriftScene: SKScene {
         over = false
         stopped = false
         stagePanel.isHidden = true
+        stageHeading.isHidden = true
+        stageCaption.isHidden = true
         message.text = ""
         ship.isHidden = false
 
