@@ -39,6 +39,7 @@ struct Flight3DSnapshot: Codable {
     var shieldRemaining: Double
     var shieldRechargeRemaining: Double
     var lastShotAgo: Double
+    var ammoReserve: AmmoReserve?
     var missilesRemaining: Int
     var missile: SavedShot3D?
     var rocks: [SavedRock3D]
@@ -172,6 +173,7 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
     private var previous: TimeInterval = 0
     private var elapsed: CGFloat = 0
     private var lastShot: CGFloat = -2
+    private var ammo = AmmoReserve()
     private var invulnerableUntil: CGFloat = 0
     private var shipVelocity = SCNVector3Zero
     private var yaw: CGFloat = 0
@@ -318,6 +320,7 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
         elapsed = 0
         previous = 0
         lastShot = -2
+        ammo = AmmoReserve()
         paused = false
         gameOver = false
         shieldActive = false
@@ -433,6 +436,8 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
         previous = time
         guard !paused && !gameOver else { return }
         elapsed += dt
+        ammo.update(dt: dt, secondsSinceShot: elapsed - lastShot,
+                    triggerHeld: pressed.contains(49))
 
         if pressed.contains(123) { yaw += dt * 1.45 }
         if pressed.contains(124) { yaw -= dt * 1.45 }
@@ -462,7 +467,7 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
                                     velocity: &shipVelocity)
 
         if pressed.contains(49) && elapsed - lastShot > CGFloat(rules.shotInterval)
-            && shots.count < rules.maxBullets {
+            && shots.count < rules.maxBullets && ammo.fire() {
             lastShot = elapsed
             fire()
         }
@@ -640,7 +645,8 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
             protectionRemaining: Double(max(0, invulnerableUntil - elapsed)),
             shieldActive: shieldActive, shieldRemaining: Double(shieldRemaining),
             shieldRechargeRemaining: Double(shieldCooldownRemaining),
-            lastShotAgo: Double(elapsed - lastShot), missilesRemaining: missilesRemaining,
+            lastShotAgo: Double(elapsed - lastShot), ammoReserve: ammo,
+            missilesRemaining: missilesRemaining,
             missile: nuclearMissile.map {
                 SavedShot3D(position: saved($0.node.position),
                             velocity: saved($0.velocity), remaining: Double($0.fuse))
@@ -685,6 +691,7 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
         shieldCooldownRemaining = CGFloat(data.shieldRechargeRemaining)
         shield.isHidden = !shieldActive
         lastShot = elapsed - CGFloat(data.lastShotAgo)
+        ammo = data.ammoReserve ?? AmmoReserve()
         missilesRemaining = data.missilesRemaining
         lastBlackHole = elapsed - CGFloat(data.lastBlackHoleAgo)
         nextBlackHoleDelay = CGFloat(data.nextBlackHoleDelay)
