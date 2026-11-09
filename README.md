@@ -32,6 +32,19 @@ A GitHub Actions macOS build runs on pushes to `main` and pull requests. This is
 
 Click inside the playfield for keyboard focus. In **3D Flight**, left/right arrows yaw, **I/K** pitch, **Q/E** roll, **W/X** rise/dive, **A/D** strafe; Up thrusts forward and Down reverses. Space fires, S shields and N launches a missile.
 
+## v0.9 — Cinematic telescope-photo backgrounds
+
+Modern (2D) now uses real, layered raster astrophotography instead of primarily drawing the backdrop from procedural dots and vector glows. The two source plates are:
+
+- [NASA SVS 31285: Webb Cosmic Cliffs, NGC 3324](https://svs.gsfc.nasa.gov/31285/) — image credit NASA, ESA, CSA, STScI.
+- [NASA SVS 12086: Hubble Orion Nebula](https://svs.gsfc.nasa.gov/12086/) — image credit NASA/ESA/STScI/AURA/The Hubble Heritage Team.
+
+On the first launch in Modern, the game downloads these official NASA SVS JPEG plates over HTTPS into the user's macOS Caches directory under `VectorDrift/TelescopeSky`. Later launches read cached files offline. If images cannot be fetched, the prior procedural sky remains visible; it does not block gameplay. External data is limited to these two image resources, loaded only in Modern 2D. Modern displays a source-credit label in the bottom toolbar.
+
+The photographic renderer includes a full-screen base plate, two independent soft nebula exposures, slow warp/displacement shaders, slight image breathing, motion-dependent parallax, and a short hyperspace zoom impulse. Black-hole lensing bends photographic texture samples along with the existing procedural fallback. The foreground game objects, physics and Classic mode are unchanged. Actual imagery is provided by NASA's official SVS site rather than resembling it with procedural colored circles.
+
+The downloaded image is rendered at reduced opacity and with enlarged crops to retain legibility. This is a first image-driven pass, not a filmed or fully volumetric simulation. macOS GPU rendering and image loading should be tested locally even when macOS compilation passes.
+
 ## v0.8 features (deep-space skies and asteroid-belt passages)
 
 - **Modern mode starfield:** a procedural star atlas with roughly a thousand dim stars, ~110 moderately bright stars, and nine prominent six-ray telescope-style stars. Lower average brightness keeps bullets and asteroids readable.
