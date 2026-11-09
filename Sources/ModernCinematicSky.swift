@@ -85,208 +85,280 @@ enum TelescopeSkyLibrary {
 /// Independent parallax, changing opacity, animated UV displacement and a
 /// one-second warp impulse create travel/morphing without washing out gameplay.
 final class ModernCinematicSky: SKNode {
-    let sceneSize: CGSize
+    private(set) var sceneSize: CGSize
 
-    private struct Layer {
-        var node: SKSpriteNode
-        let shader: SKShader
-        let time: SKUniform
-        let shift: SKUniform
-        let lensCenter: SKUniform
-        let lensStrength: SKUniform
-        let morph: SKUniform
-        let warp: SKUniform
-        let baseAlpha: CGFloat
-    }
-
+    // One screen-filling sprite, not multiple independently visible photos.
+    // A single fragment shader blends both photographs through a continuously
+    // evolving, feathered gas field; therefore no photo rectangles can appear.
     private let fallback: ModernSpaceBackdrop
-    private var photos: [Layer] = []
-    private var loaded = Set<TelescopeSkyLibrary.Plate>()
-    private var fadeIn: [CGFloat] = [0, 0, 0]
-    private var lastTime: CGFloat?
-    private var travel = CGVector.zero
+    private var canvas: SKSpriteNode?
+    private var webImage: SKTexture?
+    private var orionImage: SKTexture?
+    private var cloudUniform: SKUniform?
+    private var shader: SKShader?
+
+    private let timeUniform = SKUniform(name: "u_time", float: 0)
+    private let velocityUniform = SKUniform(name: "u_movement", vectorFloat2: vector_float2(0, 0))
+    private let cropWebb = SKUniform(name: "u_webbCrop", vectorFloat2: vector_float2(0.82, 0.82))
+    private let cropOrion = SKUniform(name: "u_orionCrop", vectorFloat2: vector_float2(0.82, 0.82))
+    private let overlayUniform = SKUniform(name: "u_overlayBlend", float: 0)
+    private let densityUniform = SKUniform(name: "u_density", float: 0.5)
+    private let warpUniform = SKUniform(name: "u_warp", float: 0)
+    private let lensCenterUniform = SKUniform(name: "u_lensCenter", vectorFloat2: vector_float2(0.5, 0.5))
+    private let lensStrengthUniform = SKUniform(name: "u_lensStrength", float: 0)
+    private let aspectUniform = SKUniform(name: "u_aspect", float: 1.5)
+
+    private var previousTime: CGFloat?
+    private var movement = CGVector.zero
     private var warpRemaining: CGFloat = 0
+    private var overlayAppearance: CGFloat = 0
+    private var currentLensPoint: CGPoint?
+    private var currentLensIntensity: CGFloat = 0
 
     init(size: CGSize) {
         sceneSize = CGSize(width: max(1, size.width), height: max(1, size.height))
-        fallback = ModernSpaceBackdrop(size: size)
+        fallback = ModernSpaceBackdrop(size: sceneSize)
         super.init()
         zPosition = -30
         isUserInteractionEnabled = false
 
         fallback.zPosition = -20
         addChild(fallback)
+        resize(to: sceneSize)
 
-        // Three separate image layers whose textures arrive asynchronously.
-        photos = [
-            makeLayer(depth: -10, baseAlpha: 0.82, morphAmount: 0.0013),
-            makeLayer(depth: -9, baseAlpha: 0.34, morphAmount: 0.006),
-            makeLayer(depth: -8, baseAlpha: 0.17, morphAmount: 0.008)
-        ]
-
-        TelescopeSkyLibrary.image(.cosmicCliffs) { [weak self] image in
-            self?.install(image, plate: .cosmicCliffs)
+        // NASA textures download once per device and are cached. The existing
+        // procedural sky is a usable fallback for first run and offline play.
+        TelescopeSkyLibrary.image(.cosmicCliffs) { [weak self] picture in
+            guard let self, let picture else { return }
+            let texture = SKTexture(image: picture)
+            texture.filteringMode = .linear
+            self.webImage = texture
+            self.configureCanvas()
         }
-        TelescopeSkyLibrary.image(.orionNebula) { [weak self] image in
-            self?.install(image, plate: .orionNebula)
+        TelescopeSkyLibrary.image(.orionNebula) { [weak self] picture in
+            guard let self, let picture else { return }
+            let texture = SKTexture(image: picture)
+            texture.filteringMode = .linear
+            self.orionImage = texture
+            self.configureCanvas()
         }
     }
 
     required init?(coder: NSCoder) { nil }
 
-    /// Every layer has its own lens center because photo sprites have different
-    /// sizes and positions; their UV coordinates are not the screen coordinates.
-    private func makeLayer(depth: CGFloat, baseAlpha: CGFloat,
-                           morphAmount: Float) -> Layer {
-        let time = SKUniform(name: "u_time", float: 0)
-        let shift = SKUniform(name: "u_shift", vectorFloat2: vector_float2(0, 0))
-        let center = SKUniform(name: "u_lensCenter", vectorFloat2: vector_float2(0.5, 0.5))
-        let lensStrength = SKUniform(name: "u_lensStrength", float: 0)
-        let morph = SKUniform(name: "u_morph", float: morphAmount)
-        let warp = SKUniform(name: "u_warp", float: 0)
-
-        let shader = SKShader(source: """
-            void main() {
-                vec2 uv = v_tex_coord;
-                float t = u_time;
-
-                // Very small fluid displacement; no destructive re-sampling.
-                vec2 flow = vec2(
-                    sin(uv.y * 11.4 + t * 0.19) * 0.7 +
-                    sin(uv.x * 16.3 - uv.y * 6.0 + t * 0.13) * 0.3,
-                    cos(uv.x * 9.1 - t * 0.17) * 0.6 +
-                    sin(uv.y * 12.8 + uv.x * 4.3 + t * 0.11) * 0.4
-                );
-                uv += flow * u_morph;
-
-                // Warp acceleration zooms the picture slightly outward.
-                uv = (uv - 0.5) * (1.0 - u_warp * 0.085) + 0.5;
-                uv += u_shift;
-
-                // Gravitational lensing refracts image detail around a dark core.
-                vec2 r = uv - u_lensCenter;
-                float d = length(r);
-                float annulus = smoothstep(0.018, 0.046, d) *
-                                (1.0 - smoothstep(0.12, 0.26, d));
-                vec2 deflection = r / max(d, 0.001) *
-                                  (0.019 * u_lensStrength * annulus /
-                                   (0.42 + d * 9.0));
-                vec2 sampleUV = clamp(uv + deflection, 0.002, 0.998);
-                vec4 tex = texture2D(u_texture, sampleUV);
-                gl_FragColor = tex * v_color_mix;
-            }
-            """)
-        shader.uniforms = [time, shift, center, lensStrength, morph, warp]
-        let node = SKSpriteNode(color: .clear, size: sceneSize)
-        node.position = CGPoint(x: sceneSize.width * 0.5, y: sceneSize.height * 0.5)
-        node.zPosition = depth
-        node.alpha = 0
-        node.shader = shader
-        if depth > -10 { node.blendMode = .screen }
-        addChild(node)
-
-        return Layer(node: node, shader: shader, time: time,
-                     shift: shift, lensCenter: center,
-                     lensStrength: lensStrength, morph: morph,
-                     warp: warp, baseAlpha: baseAlpha)
+    func resize(to size: CGSize) {
+        let previous = sceneSize
+        sceneSize = CGSize(width: max(1, size.width), height: max(1, size.height))
+        fallback.xScale = sceneSize.width / max(1, previous.width) * fallback.xScale
+        fallback.yScale = sceneSize.height / max(1, previous.height) * fallback.yScale
+        canvas?.size = sceneSize
+        canvas?.position = CGPoint(x: sceneSize.width / 2, y: sceneSize.height / 2)
+        aspectUniform.floatValue = Float(sceneSize.width / sceneSize.height)
+        updateTextureCrops()
+        applyLensCoordinates()
     }
 
-    private func install(_ image: NSImage?, plate: TelescopeSkyLibrary.Plate) {
-        guard let image else { return }
-        let texture = SKTexture(image: image)
-        texture.filteringMode = .linear
-        loaded.insert(plate)
-        if plate == .cosmicCliffs {
-            photos[0].node.texture = texture
-            photos[2].node.texture = texture
-            // Oversized crop avoids visible image edges during thrust/zoom.
-            photos[0].node.size = coverSize(for: texture, overfill: 1.31)
-            photos[2].node.size = coverSize(for: texture, overfill: 1.57)
-            photos[2].node.zRotation = -0.24
-            fadeIn[0] = 0
-            fadeIn[2] = 0
+    private func configureCanvas() {
+        guard let webb = webImage else { return }
+
+        if canvas == nil {
+            let sprite = SKSpriteNode(texture: webb, size: sceneSize)
+            sprite.anchorPoint = CGPoint(x: 0.5, y: 0.5)
+            sprite.position = CGPoint(x: sceneSize.width / 2, y: sceneSize.height / 2)
+            sprite.alpha = 0
+            sprite.zPosition = -10
+            sprite.blendMode = .alpha
+            addChild(sprite)
+            canvas = sprite
+
+            // The second sampler must start with a real texture even when
+            // the Orion download has not yet succeeded.
+            let overlay = SKUniform(name: "u_cloudPhoto", texture: orionImage ?? webb)
+            cloudUniform = overlay
+            let shader = SKShader(source: Self.compositeShader)
+            shader.uniforms = [
+                timeUniform, velocityUniform,
+                cropWebb, cropOrion, overlay, overlayUniform,
+                densityUniform, warpUniform,
+                lensCenterUniform, lensStrengthUniform, aspectUniform
+            ]
+            sprite.shader = shader
+            self.shader = shader
+
+            // Fade the whole new sky in over the procedural fallback.
+            sprite.run(.fadeAlpha(to: 1, duration: 2.2))
+            fallback.run(.fadeAlpha(to: 0.10, duration: 2.8))
+        }
+        cloudUniform?.textureValue = orionImage ?? webb
+        if orionImage != nil {
+            // A later fade-in makes the appearance stable during async loading.
+            overlayAppearance = 0
+        }
+        updateTextureCrops()
+    }
+
+    private func updateTextureCrops() {
+        if let webImage { cropWebb.vectorFloat2Value = crop(for: webImage) }
+        if let orionImage { cropOrion.vectorFloat2Value = crop(for: orionImage) }
+        else if let webImage { cropOrion.vectorFloat2Value = crop(for: webImage) }
+    }
+
+    /// Aspect-fill, then a permanent 18% overscan for UV displacement. We do
+    /// not rotate, translate or scale the image node outside the playfield.
+    private func crop(for texture: SKTexture) -> vector_float2 {
+        let textureSize = texture.size()
+        let imageRatio = textureSize.width / max(1, textureSize.height)
+        let viewRatio = sceneSize.width / max(1, sceneSize.height)
+        let overscan: CGFloat = 0.77
+        if imageRatio > viewRatio {
+            return vector_float2(Float(overscan * viewRatio / imageRatio),
+                                 Float(overscan))
         } else {
-            photos[1].node.texture = texture
-            photos[1].node.size = coverSize(for: texture, overfill: 1.46)
-            photos[1].node.zRotation = 0.11
-            fadeIn[1] = 0
-        }
-        // Keep a touch of distant procedural starlight if Orion loads first;
-        // the full procedural sky fades once the Webb image is present.
-        if loaded.contains(.cosmicCliffs) {
-            fallback.run(.fadeAlpha(to: 0.045, duration: 2.4))
+            return vector_float2(Float(overscan),
+                                 Float(overscan * imageRatio / viewRatio))
         }
     }
 
-    private func coverSize(for texture: SKTexture, overfill: CGFloat) -> CGSize {
-        let pixels = texture.size()
-        let ratio = max(sceneSize.width / max(1, pixels.width),
-                        sceneSize.height / max(1, pixels.height))
-        return CGSize(width: pixels.width * ratio * overfill,
-                      height: pixels.height * ratio * overfill)
+    /// A coherent flow field displaces *pixels inside a stationary, full-screen
+    /// image*. Cloud masks are smooth, changing and irregular—not rectangles.
+    /// This is a single compositing pass using two samples of NASA photography.
+    private static let compositeShader: String = """
+    float noise2(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        vec2 u = f * f * (3.0 - 2.0 * f);
+        float a = fract(sin(dot(i, vec2(127.1, 311.7))) * 43758.5453);
+        float b = fract(sin(dot(i + vec2(1., 0.), vec2(127.1, 311.7))) * 43758.5453);
+        float c = fract(sin(dot(i + vec2(0., 1.), vec2(127.1, 311.7))) * 43758.5453);
+        float d = fract(sin(dot(i + vec2(1., 1.), vec2(127.1, 311.7))) * 43758.5453);
+        return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
     }
 
-    /// Invoked once per game frame. Motion is based on the ship, not a moving
-    /// camera; 2D gameplay coordinate systems and collision logic do not change.
-    func animate(time: CGFloat, density: CGFloat,
-                 shipVelocity: CGVector, thrusting: Bool) {
+    void main() {
+        vec2 uv = v_tex_coord;
+        float t = u_time;
+        vec2 screenCenter = uv - vec2(0.5);
+        float velocityScale = min(1.0, length(u_movement) * 6.0);
+
+        // Large rolling gas eddies + finer turbulent curls. No sprite edges.
+        vec2 advect = vec2(
+            sin(uv.y * 10.5 + t * 0.17) * 0.011 +
+            sin(uv.x * 7.2 - uv.y * 5.0 + t * 0.12) * 0.007,
+            cos(uv.x * 8.5 - t * 0.15) * 0.011 +
+            sin(uv.y * 9.4 + uv.x * 3.4 + t * 0.10) * 0.007
+        );
+
+        // A warped starfield is convincing only when there is stellar detail
+        // to distort. In screen UV, the hole occupies a circular world-space
+        // region even on an ultra-wide game window.
+        vec2 fromHole = uv - u_lensCenter;
+        vec2 metric = vec2(fromHole.x * u_aspect, fromHole.y);
+        float distanceToHole = length(metric);
+        float annulus = smoothstep(0.015, 0.043, distanceToHole) *
+                        (1.0 - smoothstep(0.17, 0.29, distanceToHole));
+        vec2 bendDirection = metric / max(0.001, distanceToHole);
+        vec2 bending = vec2(bendDirection.x / u_aspect,
+                            bendDirection.y) *
+                       (u_lensStrength * 0.028 * annulus /
+                        (0.52 + distanceToHole * 7.0));
+
+        // Actual photo pixels move, scale and reform through shader UVs.
+        float push = u_warp * (0.085 + velocityScale * 0.025);
+        vec2 zoomed = screenCenter * (1.0 - push) + 0.5;
+        vec2 starUV = (zoomed - 0.5) * u_webbCrop + 0.5 +
+                      u_movement * 0.22 + advect * 0.37 + bending;
+        vec3 stars = texture2D(u_texture,
+                               clamp(starUV, 0.003, 0.997)).rgb;
+
+        // A second telescope image becomes an irregular translucent nebula.
+        // Its photo boundaries never exist in scene geometry.
+        vec2 fieldPoint = uv * 3.35 + vec2(t * 0.015, -t * 0.011);
+        float broadCloud = noise2(fieldPoint + advect * 3.2);
+        float fineCloud = noise2(uv * 8.7 - vec2(t * 0.035, -t * 0.026));
+        float gas = broadCloud * 0.70 + fineCloud * 0.30;
+        gas += 0.10 * sin(uv.x * 5.1 + uv.y * 6.3 + t * 0.07);
+        float cloudMask = smoothstep(0.38, 0.72, gas);
+
+        vec2 gasUV = (zoomed - 0.5) * u_orionCrop + 0.5 +
+                     u_movement * 0.80 + advect * 1.30 + bending;
+        vec3 cloudPhoto = texture2D(u_cloudPhoto,
+                                    clamp(gasUV, 0.003, 0.997)).rgb;
+        float cloudBlend = u_overlayBlend * cloudMask *
+                           (0.80 + 0.20 * u_density);
+        vec3 color = mix(stars, cloudPhoto, cloudBlend);
+
+        // Filament-like emission gives the impression of gas moving through
+        // space rather than a crossfading still photograph.
+        float strands = smoothstep(0.44, 0.75,
+                           fineCloud * 0.55 + broadCloud * 0.45);
+        vec3 lightColor = mix(vec3(0.12, 0.34, 0.56),
+                              vec3(0.66, 0.24, 0.13), broadCloud);
+        color += lightColor * strands * cloudMask *
+                 u_overlayBlend * 0.12;
+
+        // Warp subtly stretches the stars and dust during hyperspace.
+        if (u_warp > 0.005) {
+            vec2 radial = normalize(screenCenter + vec2(0.0001));
+            vec2 trailUV = clamp(starUV - radial * 0.028 * u_warp,
+                                 0.003, 0.997);
+            vec3 trail = texture2D(u_texture, trailUV).rgb;
+            color = mix(color, max(color, trail * 0.90), u_warp * 0.45);
+        }
+
+        // Visual depth and legibility. The game remains readable even when
+        // Cosmic Cliffs are intensely illuminated in the source photograph.
+        float edge = length(screenCenter * vec2(u_aspect * 0.72, 1.0));
+        float vignette = 1.0 - 0.18 * smoothstep(0.32, 0.80, edge);
+        color *= vignette * 0.82;
+        gl_FragColor = vec4(color, 1.0) * v_color_mix;
+    }
+    """
+
+    /// Motion is fed into shader coordinates, not into moving rectangles.
+    func animate(time: CGFloat, density: CGFloat, shipVelocity: CGVector,
+                 thrusting: Bool) {
         fallback.animate(time: time, density: density)
-        let dt = min(1.0 / 20.0, max(0, time - (lastTime ?? time)))
-        lastTime = time
-        if warpRemaining > 0 { warpRemaining = max(0, warpRemaining - dt) }
-        let speed = min(1, hypot(shipVelocity.dx, shipVelocity.dy) / 310)
+        let dt = min(CGFloat(1.0 / 20.0), max(0, time - (previousTime ?? time)))
+        previousTime = time
+        warpRemaining = max(0, warpRemaining - dt)
 
-        // Accumulated parallax is deliberately bounded. Individual plates use
-        // independent scale factors; the nearest haze reacts most to thrust.
-        let flightFactor: CGFloat = thrusting ? 0.012 : 0.005
-        travel.dx = max(-32, min(32, travel.dx * 0.996 - shipVelocity.dx * dt * flightFactor))
-        travel.dy = max(-24, min(24, travel.dy * 0.996 - shipVelocity.dy * dt * flightFactor))
+        let acceleration: CGFloat = thrusting ? 0.013 : 0.006
+        movement.dx = max(-0.16, min(0.16,
+            movement.dx * 0.995 - shipVelocity.dx * dt * acceleration))
+        movement.dy = max(-0.12, min(0.12,
+            movement.dy * 0.995 - shipVelocity.dy * dt * acceleration))
 
-        for i in photos.indices {
-            guard photos[i].node.texture != nil else { continue }
-            let layer = photos[i]
-            fadeIn[i] = min(1, fadeIn[i] + dt / (i == 0 ? 2.3 : 3.5))
-            let phase = CGFloat(i) * 1.64
-            let perspective: CGFloat = [0.28, 0.80, 1.25][i]
-            let slowX = sin(time * (0.045 + CGFloat(i) * 0.012) + phase) * 12
-            let slowY = cos(time * (0.032 + CGFloat(i) * 0.014) + phase) * 10
-            layer.node.position = CGPoint(
-                x: sceneSize.width / 2 + slowX + travel.dx * perspective,
-                y: sceneSize.height / 2 + slowY + travel.dy * perspective
-            )
-            layer.node.alpha = fadeIn[i] * layer.baseAlpha *
-                (0.92 + 0.08 * sin(time * 0.14 + phase)) *
-                (i == 1 ? 0.80 + density * 0.23 : 1.0)
-            layer.time.floatValue = Float(time)
-            layer.shift.vectorFloat2Value = vector_float2(
-                Float(sin(time * 0.055 + phase) * 0.006),
-                Float(cos(time * 0.041 - phase) * 0.005)
-            )
-            layer.warp.floatValue = Float(warpRemaining * (0.75 + speed * 0.25))
+        timeUniform.floatValue = Float(time)
+        velocityUniform.vectorFloat2Value = vector_float2(
+            Float(movement.dx / max(1, sceneSize.width)),
+            Float(movement.dy / max(1, sceneSize.height)))
+        densityUniform.floatValue = Float(max(0, min(1, density)))
+        warpUniform.floatValue = Float(min(1, warpRemaining / 0.9))
+
+        if orionImage != nil && canvas != nil {
+            overlayAppearance = min(1, overlayAppearance + dt / 4)
+            overlayUniform.floatValue = Float(overlayAppearance * 0.67)
         }
     }
 
     func lens(at point: CGPoint?, intensity: CGFloat = 1) {
-        // Keep the existing lens available until photograph downloads finish.
+        currentLensPoint = point
+        currentLensIntensity = max(0, min(1, intensity))
         fallback.lens(at: point, intensity: intensity)
-        for layer in photos {
-            guard let point else {
-                layer.lensStrength.floatValue = 0
-                continue
-            }
-            let node = layer.node
-            let origin = CGPoint(x: node.position.x - node.size.width / 2,
-                                 y: node.position.y - node.size.height / 2)
-            layer.lensCenter.vectorFloat2Value = vector_float2(
-                Float((point.x - origin.x) / max(1, node.size.width)),
-                Float((point.y - origin.y) / max(1, node.size.height))
-            )
-            layer.lensStrength.floatValue = Float(max(0, min(1, intensity)))
-        }
+        applyLensCoordinates()
     }
 
-    /// A noticeable, short-lived photo zoom when the player hyperspace-jumps.
+    private func applyLensCoordinates() {
+        guard let point = currentLensPoint else {
+            lensStrengthUniform.floatValue = 0
+            return
+        }
+        lensCenterUniform.vectorFloat2Value = vector_float2(
+            Float(point.x / sceneSize.width), Float(point.y / sceneSize.height))
+        lensStrengthUniform.floatValue = Float(currentLensIntensity)
+    }
+
     func warpBurst() {
-        warpRemaining = 1
+        warpRemaining = 0.9
     }
 }
