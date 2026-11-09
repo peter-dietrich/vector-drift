@@ -1461,7 +1461,7 @@ final class DriftScene: SKScene {
             velocity: CGVector(dx: velocity.dx * 0.35 + direction.dx * 125,
                                dy: velocity.dy * 0.35 + direction.dy * 125),
             fuse: 1.7)
-        ArcadeAudio.shared.play(.comet)
+        ArcadeAudio.shared.play(.fire)
         updateHud()
     }
 
@@ -1518,7 +1518,7 @@ final class DriftScene: SKScene {
                 enemyShots.remove(at: i).node.removeFromParent()
             }
         }
-        ArcadeAudio.shared.play(.comet)
+        ArcadeAudio.shared.play(.nuclear)
     }
 
     private func detonateComet(at point: CGPoint) {
