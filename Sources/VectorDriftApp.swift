@@ -487,7 +487,11 @@ private struct BlackHoleEvent {
 }
 
 final class DriftScene: SKScene {
-    var modern = false { didSet { updateStyle() } }
+    var modern = false {
+        didSet {
+            if modern != oldValue { updateStyle() }
+        }
+    }
     fileprivate var difficulty: Difficulty = .medium
     var customRules: GameRules?
     private var boulders: [Boulder] = []
@@ -568,7 +572,13 @@ final class DriftScene: SKScene {
     private let stagePanel = SKShapeNode(rectOf: CGSize(width: 398, height: 108), cornerRadius: 8)
 
     override func didMove(to view: SKView) {
-        guard !ready else { return }
+        if ready {
+            // SwiftUI can recreate the view while retaining this scene.
+            // Ensure our persistent backdrop is visible after reattachment.
+            didChangeSize(size)
+            updateStyle()
+            return
+        }
         ready = true
         backgroundColor = .black
         ship.fillColor = .clear
@@ -765,7 +775,17 @@ final class DriftScene: SKScene {
         ArcadeAudio.shared.play(.wave)
         spawnWave()
         updateHud()
-        updateStyle()
+        if modern {
+            // A new game gets new space artwork, but mode toggles never
+            // discard all of the textures and shaders.
+            if backgroundLayer == nil {
+                updateStyle()
+            } else {
+                backgroundLayer?.regenerate()
+            }
+        } else {
+            updateStyle()
+        }
     }
 
     private func resetShip() {
@@ -1368,7 +1388,8 @@ final class DriftScene: SKScene {
         rightFootnote.text = shieldStatus
         difficultyReadout.text = "MODE  " + difficulty.title.uppercased() +
             (nuclearMissile == nil ? "" : "  ·  MISSILE AWAY")
-        ammoReadout.text = String(format: "ROUNDS  %04d / 1000", ammo.rounds)
+        ammoReadout.text = String(format: "ROUNDS  %03d / %03d",
+                                  ammo.rounds, AmmoReserve.capacity)
         ammoStatus.text = ammo.rechargeStatus(secondsSinceShot: elapsed - lastFire)
     }
 
@@ -1427,16 +1448,24 @@ final class DriftScene: SKScene {
         }
         modernShipDetail.isHidden = !modern
         flame.isHidden = true
-        backgroundLayer?.removeFromParent()
-        backgroundLayer = nil
+        // Keep the procedural scene alive during graphics-mode changes.
+        // Recreating multiple shader textures on each toggle could render an
+        // empty or white background until gameplay began.
         if modern {
-            let layer = VectorNebulaField(size: size)
-            addChild(layer)
-            backgroundLayer = layer
-            layer.animate(time: elapsed, density: beltDensity(at: elapsed),
-                          shipVelocity: velocity, thrusting: false)
-            layer.lens(at: blackHole?.node.position)
+            if backgroundLayer == nil {
+                backgroundLayer = VectorNebulaField(size: size)
+            }
+            if let layer = backgroundLayer {
+                if layer.parent !== self {
+                    layer.removeFromParent()
+                    addChild(layer)
+                }
+                layer.resize(to: size)
+                layer.isHidden = false
+                layer.lens(at: blackHole?.node.position)
+            }
         } else {
+            backgroundLayer?.isHidden = true
             // Comets and shockwaves remain in Classic on Hard difficulty.
             if difficulty != .hard {
                 comet?.node.removeFromParent()
@@ -2072,6 +2101,7 @@ final class DriftScene: SKScene {
         shieldNode.isHidden = !shieldActive
         lastFire = elapsed - CGFloat(snapshot.timeSinceShot)
         ammo = snapshot.ammoReserve ?? AmmoReserve()
+        ammo.normalize()
         lastWarp = elapsed - CGFloat(snapshot.timeSinceWarp)
         lastComet = elapsed - CGFloat(snapshot.timeSinceComet)
         nextCometDelay = CGFloat(snapshot.nextCometDelay)
