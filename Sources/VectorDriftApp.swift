@@ -162,11 +162,30 @@ private struct GameWindow: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Text("VECTOR DRIFT")
-                    .font(.system(.headline, design: .monospaced))
-                Spacer()
-                HStack(spacing: 3) {
+            VStack(spacing: 10) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("VECTOR DRIFT")
+                            .font(.system(size: 19, weight: .black, design: .monospaced))
+                            .foregroundStyle(.white)
+                        Text("ARCADE  /  MACOS")
+                            .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(.cyan.opacity(0.7))
+                    }
+                    Spacer()
+                    Toggle("Sound", isOn: $soundEnabled)
+                        .toggleStyle(.checkbox)
+                    Button("Scores") { showScores = true }
+                    Button("New Game") { game.restart() }
+                        .keyboardShortcut("r", modifiers: [.command])
+                        .buttonStyle(.borderedProminent)
+                        .tint(.cyan)
+                }
+                HStack(spacing: 12) {
+                    Text("DIFFICULTY")
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundStyle(.gray)
+                    HStack(spacing: 3) {
                     ForEach(Difficulty.allCases) { level in
                         Button(level.title) { difficulty = level.rawValue }
                             .buttonStyle(.plain)
@@ -180,8 +199,12 @@ private struct GameWindow: View {
                                 .strokeBorder(Color.white.opacity(0.38), lineWidth: 1))
                     }
                 }
-                .help("Difficulty: changing this starts a new game")
-                HStack(spacing: 3) {
+                    .help("Difficulty: changing this starts a new game")
+                    Spacer()
+                    Text("GRAPHICS")
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundStyle(.gray)
+                    HStack(spacing: 3) {
                     ForEach(Look.allCases) { look in
                         Button(look.title) { mode = look.rawValue }
                             .buttonStyle(.plain)
@@ -195,15 +218,11 @@ private struct GameWindow: View {
                                 .strokeBorder(Color.white.opacity(0.38), lineWidth: 1))
                     }
                 }
-                Toggle("Sound", isOn: $soundEnabled)
-                    .toggleStyle(.checkbox)
-                Button("Scores") { showScores = true }
-                Button("New Game") { game.restart() }
-                    .keyboardShortcut("r", modifiers: [.command])
+                }
             }
-            .padding(.horizontal, 18)
-            .frame(height: 54)
-            .background(Color(white: 0.10))
+            .padding(.horizontal, 20)
+            .padding(.vertical, 10)
+            .background(Color(white: 0.09))
             GameView(scene: game)
                 .background(.black)
             HStack {
