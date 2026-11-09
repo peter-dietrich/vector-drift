@@ -1284,7 +1284,7 @@ final class DriftScene: SKScene {
     }
 
     private func updateHud() {
-        hud.text = String(format: "%06d", score)
+        hud.text = String(format: "SCORE %06d", score)
         let density = modern ? Int((beltDensity(at: elapsed) * 100).rounded()) : 0
         leftFootnote.text = modern
             ? String(format: "BEST %06d   WAVE %02d   BELT %02d%%", high, wave, density)
