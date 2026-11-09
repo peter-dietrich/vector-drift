@@ -32,6 +32,17 @@ A GitHub Actions macOS build runs on pushes to `main` and pull requests. This is
 
 Click inside the playfield for keyboard focus. In **3D Flight**, left/right arrows yaw, **I/K** pitch, **Q/E** roll, **W/X** rise/dive, **A/D** strafe; Up thrusts forward and Down reverses. Space fires, S shields and N launches a missile.
 
+## v0.10.1 — Visible motion and coherent gas edges
+
+The initial v0.10 background was visually attractive but barely moved during flight, because its parallax displacement was limited to about 38×30 points and eased back toward zero. This version integrates actual ship travel continuously and assigns different speeds to layers:
+
+- Distant stars scroll at 0.30×; near dust at 1.60×. Both wrap indefinitely rather than stopping after a small displacement.
+- Far gas, intermediate clouds, near clouds and their edge highlights respond progressively more to thrust and inertia. Gas shifts smoothly without exposing rectangular texture boundaries.
+- Faint motion streaks appear on stars and dust during sustained thrust. Hyperspace still triggers a brief layer-dependent zoom.
+- The 83 independent wavy line paths are removed. In their place are 23 short, branching, translucent contours generated along the same cloud-boundary ridge as the nebula itself.
+- Background animation intentionally pauses when the game is paused; test motion during active play by holding Up for several seconds.
+- The footer now correctly credits this as original procedural artwork, not NASA photography.
+
 ## v0.10 — Vector Nebula v2: all five graphics upgrades
 
 Modern now uses **original procedural vector-authored art** rather than downloading telescope photographs. The scene is built once per mode activation from smooth cubic Bézier cloud contours, vector stars, galaxy ellipses, filaments, and dust, then rendered into multiple transparent textures for fast SpriteKit animation. This eliminates floating rectangular photo panels. It does not use NASA images or a network connection.
