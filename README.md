@@ -32,6 +32,15 @@ A GitHub Actions macOS build runs on pushes to `main` and pull requests. This is
 
 Click inside the playfield for keyboard focus. In **3D Flight**, left/right arrows yaw, **I/K** pitch, **Q/E** roll, **W/X** rise/dive, **A/D** strafe; Up thrusts forward and Down reverses. Space fires, S shields and N launches a missile.
 
+## v0.13 — Right-side vertical telemetry
+
+- **Single telemetry column in 2D:** removes the twin top-corner panels and consolidates flight telemetry and combat information into one narrow, approximately 252-point-wide right-hand readout.
+- **Readable type hierarchy:** large score, wave and density values; small amber section headers; distinct high-score and combat/shield sublines.
+- **Light glass overlay:** translucent near-black/blue surface, understated hairline separators, and one muted vertical amber rule. The surrounding sky remains visible.
+- **Data:** current score, best, wave, belt density (Modern) or flight profile (Classic), lives, nukes, shield status, difficulty and missile-in-flight alert.
+- **Responsive layout:** panel width adapts to scene width, vertical spacing scales down for shorter game windows.
+- **Scope:** Classic and Modern 2D use the new column; 3D Flight retains its existing separate HUD layout.
+
 ## v0.12 — Darker, richer black holes
 
 - **Modern 2D:** replaces the old stationary circle and thin purple-gray torus with a nearly black event horizon, asymmetric narrow photon ring, and tilted front/back accretion disk in quiet white, graphite and muted warm tones. Sparse luminous knots orbit slowly; the center stays dark.
