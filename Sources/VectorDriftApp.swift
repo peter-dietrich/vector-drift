@@ -19,8 +19,39 @@ private enum Look: String, CaseIterable, Identifiable {
     var title: String { self == .classic ? "Classic" : "Modern Vector" }
 }
 
+private enum Difficulty: String, CaseIterable, Identifiable {
+    case easy, medium, hard
+    var id: String { rawValue }
+    var title: String { rawValue.capitalized }
+
+    var speedMultiplier: CGFloat {
+        switch self {
+        case .easy: return 0.75
+        case .medium: return 1
+        case .hard: return 1.32
+        }
+    }
+
+    var startingLives: Int {
+        switch self {
+        case .easy: return 5
+        case .medium: return 3
+        case .hard: return 2
+        }
+    }
+
+    var initialAsteroids: Int {
+        switch self {
+        case .easy: return 3
+        case .medium: return 4
+        case .hard: return 5
+        }
+    }
+}
+
 private struct GameWindow: View {
     @AppStorage("visualMode") private var mode = Look.classic.rawValue
+    @AppStorage("difficulty") private var difficulty = Difficulty.medium.rawValue
     @State private var game: DriftScene = {
         let scene = DriftScene(size: CGSize(width: 1080, height: 670))
         scene.scaleMode = .resizeFill
@@ -33,6 +64,12 @@ private struct GameWindow: View {
                 Text("VECTOR DRIFT")
                     .font(.system(.headline, design: .monospaced))
                 Spacer()
+                Picker("Difficulty", selection: $difficulty) {
+                    ForEach(Difficulty.allCases) { level in Text(level.title).tag(level.rawValue) }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 215)
+                .help("Changing difficulty starts a new game")
                 Picker("Graphics", selection: $mode) {
                     ForEach(Look.allCases) { look in Text(look.title).tag(look.rawValue) }
                 }
@@ -56,8 +93,16 @@ private struct GameWindow: View {
             .background(Color(white: 0.10))
         }
         .foregroundStyle(.white)
-        .onAppear { game.modern = mode == Look.modern.rawValue }
+        .onAppear {
+            game.modern = mode == Look.modern.rawValue
+            game.difficulty = Difficulty(rawValue: difficulty) ?? .medium
+            game.restart()
+        }
         .onChange(of: mode) { value in game.modern = value == Look.modern.rawValue }
+        .onChange(of: difficulty) { value in
+            game.difficulty = Difficulty(rawValue: value) ?? .medium
+            game.restart()
+        }
     }
 }
 
@@ -110,6 +155,7 @@ private struct Laser {
 
 final class DriftScene: SKScene {
     var modern = false { didSet { updateStyle() } }
+    fileprivate var difficulty: Difficulty = .medium
     private var boulders: [Boulder] = []
     private var lasers: [Laser] = []
     private var held = Set<UInt16>()
@@ -169,7 +215,7 @@ final class DriftScene: SKScene {
         boulders.removeAll()
         lasers.removeAll()
         held.removeAll()
-        score = 0; lives = 3; wave = 1
+        score = 0; lives = difficulty.startingLives; wave = 1
         elapsed = 0; lastTime = 0; lastFire = -2; lastWarp = -10
         stopped = false; over = false
         resetShip()
@@ -272,8 +318,10 @@ final class DriftScene: SKScene {
                 if rock.level > 1 {
                     for direction in [-0.75, 0.75] as [CGFloat] {
                         let angle = atan2(rock.velocity.dy, rock.velocity.dx) + direction
-                        let speed: CGFloat = rock.level == 3 ? 115 : 155
-                        spawnRock(level: rock.level - 1, at: rock.node.position,
+                        // Each split gets its own speed based on the *new* smaller size.
+                        let nextLevel = rock.level - 1
+                        let speed = rockSpeed(for: nextLevel)
+                        spawnRock(level: nextLevel, at: rock.node.position,
                                   velocity: CGVector(dx: cos(angle) * speed, dy: sin(angle) * speed))
                     }
                 }
@@ -315,7 +363,7 @@ final class DriftScene: SKScene {
     }
 
     private func spawnWave() {
-        for _ in 0..<min(3 + wave, 10) {
+        for _ in 0..<min(difficulty.initialAsteroids + wave - 1, 12) {
             var point = CGPoint.zero
             for _ in 0..<30 {
                 point = CGPoint(x: .random(in: 40...max(41, size.width - 40)),
@@ -323,10 +371,23 @@ final class DriftScene: SKScene {
                 if hypot(point.x - ship.position.x, point.y - ship.position.y) > 170 { break }
             }
             let angle = CGFloat.random(in: 0...(2 * .pi))
-            let speed = CGFloat.random(in: 35...78) + CGFloat(wave) * 4
+            let speed = rockSpeed(for: 3)
             spawnRock(level: 3, at: point,
                       velocity: CGVector(dx: cos(angle) * speed, dy: sin(angle) * speed))
         }
+    }
+
+    // Large boulders drift, medium fragments move briskly, small fragments are fast.
+    // Wave escalation and difficulty apply to every size without changing its ordering.
+    private func rockSpeed(for level: Int) -> CGFloat {
+        let baseRange: ClosedRange<CGFloat>
+        switch level {
+        case 3: baseRange = 36...68
+        case 2: baseRange = 85...118
+        default: baseRange = 138...190
+        }
+        let waveFactor = 1 + min(CGFloat(wave - 1) * 0.045, 0.45)
+        return CGFloat.random(in: baseRange) * difficulty.speedMultiplier * waveFactor
     }
 
     private func spawnRock(level: Int, at point: CGPoint, velocity: CGVector) {
@@ -353,8 +414,8 @@ final class DriftScene: SKScene {
     }
 
     private func updateHud() {
-        hud.text = String(format: "SCORE %06d     HIGH %06d     WAVE %d     LIVES %d",
-                          score, high, wave, lives)
+        hud.text = String(format: "SCORE %06d   HIGH %06d   WAVE %d   LIVES %d   %@",
+                          score, high, wave, lives, difficulty.title.uppercased())
     }
 
     private func updateStyle() {
