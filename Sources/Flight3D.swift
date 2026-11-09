@@ -2,6 +2,87 @@ import AppKit
 import SceneKit
 import SwiftUI
 
+struct SavedVector3D: Codable {
+    var x: Double
+    var y: Double
+    var z: Double
+}
+
+struct SavedRock3D: Codable {
+    var level: Int
+    var position: SavedVector3D
+    var velocity: SavedVector3D
+    var health: Int
+    var fractureRemaining: Double?
+}
+
+struct SavedShot3D: Codable {
+    var position: SavedVector3D
+    var velocity: SavedVector3D
+    var remaining: Double
+}
+
+struct Flight3DSnapshot: Codable {
+    var difficulty: String
+    var customRules: GameRules?
+    var score: Int
+    var lives: Int
+    var wave: Int
+    var elapsed: Double
+    var yaw: Double
+    var pitch: Double
+    var roll: Double
+    var shipPosition: SavedVector3D
+    var shipVelocity: SavedVector3D
+    var protectionRemaining: Double
+    var shieldActive: Bool
+    var shieldRemaining: Double
+    var shieldRechargeRemaining: Double
+    var lastShotAgo: Double
+    var missilesRemaining: Int
+    var missile: SavedShot3D?
+    var rocks: [SavedRock3D]
+    var shots: [SavedShot3D]
+    var blackHolePosition: SavedVector3D?
+    var blackHoleRemaining: Double
+    var lastBlackHoleAgo: Double
+    var nextBlackHoleDelay: Double
+}
+
+struct Flight3DSaveSlot: Codable, Identifiable {
+    var id: String
+    var date: Date
+    var summary: String
+    var snapshot: Flight3DSnapshot
+}
+
+enum Flight3DStore {
+    private static let key = "vectorDrift.3dSaves.v1"
+    static func saves() -> [Flight3DSaveSlot] {
+        guard let data = UserDefaults.standard.data(forKey: key),
+              let list = try? JSONDecoder().decode([Flight3DSaveSlot].self, from: data) else {
+            return []
+        }
+        return list
+    }
+    static func save(_ snapshot: Flight3DSnapshot) {
+        let slot = Flight3DSaveSlot(id: UUID().uuidString, date: Date(),
+             summary: "3D Flight · Wave \(snapshot.wave) · \(snapshot.score) points",
+             snapshot: snapshot)
+        var list = saves()
+        list.insert(slot, at: 0)
+        if let data = try? JSONEncoder().encode(Array(list.prefix(12))) {
+            UserDefaults.standard.set(data, forKey: key)
+        }
+    }
+    static func delete(id: String) {
+        let list = saves().filter { $0.id != id }
+        if let data = try? JSONEncoder().encode(list) {
+            UserDefaults.standard.set(data, forKey: key)
+        }
+    }
+}
+
 /// Independent fully spatial arena. Ship, projectiles and rocks all use
 /// real three-dimensional positions and velocities (not 2D billboards).
 struct Flight3DView: NSViewRepresentable {
