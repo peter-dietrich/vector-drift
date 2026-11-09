@@ -433,7 +433,7 @@ final class VectorNebulaField: SKNode {
     private func bell() -> CGFloat {
         let a=max(0.000001,CGFloat.random(in:0...1))
         let b=CGFloat.random(in:0...1)
-        return sqrt(-2*log(a))*cos(2*.pi*b)
+        return sqrt(-2 * log(a)) * cos(2 * CGFloat.pi * b)
     }
 
     private func makeFilaments() -> SKTexture {
@@ -472,8 +472,8 @@ final class VectorNebulaField: SKNode {
         let w=sceneSize.width,h=sceneSize.height
         for _ in 0..<460 {
             let x=CGFloat.random(in:0...w)
-            let y=h*(0.42+0.16*sin(x/w*6.2+0.7))+
-                CGFloat.random(in:-h*0.27...h*0.27)
+            let y = h * (0.42 + 0.16 * sin(x / w * 6.2 + 0.7)) +
+                CGFloat.random(in: (-h * 0.27)...(h * 0.27))
             let radius=CGFloat.random(in:0.35...1.4)
             ctx.setFillColor(CGColor(red:0.55,green:0.72,blue:0.92,
                                      alpha:CGFloat.random(in:0.06...0.22)))
