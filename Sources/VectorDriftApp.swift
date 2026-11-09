@@ -507,7 +507,8 @@ final class DriftScene: SKScene {
     private var shieldEnergy: CGFloat = 0
     private var shieldRechargeRemaining: CGFloat = 0
     private let shieldNode = ArcadeEffects.shield()
-    private var backgroundLayer: SKNode?
+    private var backgroundLayer: ModernSpaceBackdrop?
+    private var lastBeltSpawn: CGFloat = 0
     private let modernShipDetail = ModernVisuals.shipDetail()
     private let flame = ModernVisuals.engineFlame()
     private var held = Set<UInt16>()
@@ -611,6 +612,7 @@ final class DriftScene: SKScene {
         nextSaucerDelay = CGFloat.random(in: difficulty.saucerDelay)
         lastSaucerShot = 0
         nextSpark = 0
+        lastBeltSpawn = 0
         resetShip()
         protectedUntil = difficulty.respawnProtection
         ship.removeAllActions()
@@ -741,6 +743,11 @@ final class DriftScene: SKScene {
         }
 
         updateBlackHole(dt)
+        if modern {
+            let density = beltDensity(at: elapsed)
+            backgroundLayer?.animate(time: elapsed, density: density)
+            updateBeltTraffic(density: density)
+        }
         for i in boulders.indices {
             let next = CGPoint(x: boulders[i].node.position.x + boulders[i].velocity.dx * dt,
                                y: boulders[i].node.position.y + boulders[i].velocity.dy * dt)
@@ -981,8 +988,44 @@ final class DriftScene: SKScene {
         protectedUntil = elapsed + 1.4
     }
 
+    /// Asteroid belts are patchy. Built-in Modern games move through
+    /// lighter and denser lanes while custom presets retain their exact count.
+    private func beltDensity(at time: CGFloat) -> CGFloat {
+        let broad = sin(time * 0.075 + CGFloat(wave) * 0.9)
+        let pockets = sin(time * 0.21 - CGFloat(wave) * 0.42)
+        return max(0, min(1, 0.50 + broad * 0.35 + pockets * 0.15))
+    }
+
+    private func updateBeltTraffic(density: CGFloat) {
+        guard customRules == nil, wave >= 2, density > 0.68,
+              boulders.count >= 4, elapsed - lastBeltSpawn > 8.5 else { return }
+        let waveCount = difficulty.rockCount(forWave: wave)
+        guard boulders.count < min(27, waveCount + 3) else { return }
+        lastBeltSpawn = elapsed
+
+        // A single distant rock enters from the edge, instead of spawning
+        // directly on the ship. No continuous spawning when a wave is cleared.
+        let level = min(difficulty.maximumRockLevel, Bool.random() ? 2 : 3)
+        let radius = rockRadius(for: level)
+        let fromLeft = Bool.random()
+        let y = CGFloat.random(in: (size.height * 0.17)...(size.height * 0.83))
+        let x = fromLeft ? -radius : size.width + radius
+        let direction = fromLeft
+            ? CGFloat.random(in: -0.38...0.38)
+            : CGFloat.pi + CGFloat.random(in: -0.38...0.38)
+        let speed = rockSpeed(for: level)
+        spawnRock(level: level, at: CGPoint(x: x, y: y),
+                  velocity: CGVector(dx: cos(direction) * speed,
+                                     dy: sin(direction) * speed))
+    }
+
     private func spawnWave() {
-        let count = customRules?.rockCount(wave: wave) ?? difficulty.rockCount(forWave: wave)
+        let baseCount = customRules?.rockCount(wave: wave) ??
+            difficulty.rockCount(forWave: wave)
+        let laneFactor: CGFloat = modern && customRules == nil
+            ? (0.78 + beltDensity(at: elapsed) * 0.53) : 1.0
+        let count = min(30, max(1, Int((CGFloat(baseCount) * laneFactor).rounded())))
+        lastBeltSpawn = elapsed
         for index in 0..<count {
             let level = customRules?.initialRockLevel(at: index) ??
                 difficulty.startingRockLevel(at: index)
@@ -1197,9 +1240,11 @@ final class DriftScene: SKScene {
         backgroundLayer?.removeFromParent()
         backgroundLayer = nil
         if modern {
-            let layer = ModernVisuals.backdrop(size: size)
+            let layer = ModernSpaceBackdrop(size: size)
             addChild(layer)
             backgroundLayer = layer
+            layer.animate(time: elapsed, density: beltDensity(at: elapsed))
+            layer.lens(at: blackHole?.node.position)
         } else {
             // Comets and shockwaves remain in Classic on Hard difficulty.
             if difficulty != .hard {
@@ -1239,7 +1284,7 @@ final class DriftScene: SKScene {
         for wave in shockwaves { wave.ring.removeFromParent() }
         blackHole?.node.removeFromParent()
         blackHole = nil
-        backgroundLayer?.setScale(1)
+        backgroundLayer?.lens(at: nil)
         nuclearMissile?.node.removeFromParent()
         nuclearMissile = nil
         shockwaves.removeAll()
@@ -1357,7 +1402,7 @@ final class DriftScene: SKScene {
         guard customRules?.blackHoleEnabled ?? true else {
             blackHole?.node.removeFromParent()
             blackHole = nil
-            backgroundLayer?.setScale(1)
+            backgroundLayer?.lens(at: nil)
             return
         }
         if blackHole == nil && wave >= 3 && elapsed - lastBlackHole >= nextBlackHoleDelay {
@@ -1368,7 +1413,7 @@ final class DriftScene: SKScene {
         if hole.remaining <= 0 {
             hole.node.removeFromParent()
             blackHole = nil
-            backgroundLayer?.setScale(1)
+            backgroundLayer?.lens(at: nil)
             lastBlackHole = elapsed
             nextBlackHoleDelay = CGFloat.random(in: 25...42)
             return
@@ -1376,7 +1421,9 @@ final class DriftScene: SKScene {
         blackHole = hole
         hole.node.zRotation += dt * 0.75
         let center = hole.node.position
-        if modern { backgroundLayer?.setScale(1 + 0.018 * sin(elapsed * 5)) }
+        if modern {
+            backgroundLayer?.lens(at: center, intensity: min(1, hole.remaining / 1.2))
+        }
 
         func pull(at point: CGPoint) -> CGVector {
             let dx = center.x - point.x, dy = center.y - point.y
@@ -1452,23 +1499,26 @@ final class DriftScene: SKScene {
         node.zPosition = 8
         let radius: CGFloat = modern ? 28 : 22
         let disk = SKShapeNode(circleOfRadius: radius + 17)
-        disk.strokeColor = modern ? ModernVisuals.fire : .white
+        disk.strokeColor = modern
+            ? SKColor(calibratedWhite: 0.82, alpha: 0.42) : .white
         disk.fillColor = .clear
-        disk.lineWidth = modern ? 7 : 2
-        disk.glowWidth = modern ? 26 : 0
+        disk.lineWidth = modern ? 2.5 : 2
+        disk.glowWidth = modern ? 6 : 0
         node.addChild(disk)
         let ring = SKShapeNode(ellipseOf: CGSize(width: radius * 3.7, height: radius))
-        ring.strokeColor = modern ? .systemPurple : .white
+        ring.strokeColor = modern
+            ? SKColor(calibratedWhite: 0.91, alpha: 0.30) : .white
         ring.fillColor = .clear
-        ring.lineWidth = 2
-        ring.glowWidth = modern ? 15 : 0
+        ring.lineWidth = modern ? 1.6 : 2
+        ring.glowWidth = modern ? 5 : 0
         ring.zRotation = -.pi / 5
         node.addChild(ring)
         let core = SKShapeNode(circleOfRadius: radius)
         core.fillColor = .black
-        core.strokeColor = .white
-        core.lineWidth = modern ? 2.8 : 1.5
-        core.glowWidth = modern ? 15 : 0
+        core.strokeColor = modern
+            ? SKColor(calibratedWhite: 0.72, alpha: 0.56) : .white
+        core.lineWidth = modern ? 1.4 : 1.5
+        core.glowWidth = modern ? 4 : 0
         node.addChild(core)
         addChild(node)
         blackHole = BlackHoleEvent(node: node, remaining: 11)
@@ -1848,6 +1898,7 @@ final class DriftScene: SKScene {
         nextSaucerDelay = CGFloat(snapshot.nextSaucerDelay)
         lastSaucerShot = elapsed - CGFloat(snapshot.timeSinceSaucerShot)
         missilesRemaining = snapshot.missilesRemaining
+        lastBeltSpawn = elapsed
         lastBlackHole = elapsed - CGFloat(snapshot.timeSinceBlackHole)
         nextBlackHoleDelay = CGFloat(snapshot.nextBlackHoleDelay)
         titleVisible = false
