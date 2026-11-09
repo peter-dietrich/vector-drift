@@ -878,6 +878,9 @@ final class DriftScene: SKScene {
         }
         if boulders.isEmpty && shockwaves.isEmpty {
             wave += 1
+            // Enter a visually distinct region of space every wave.
+            // An individual new game already regenerates through updateStyle().
+            if modern { backgroundLayer?.regenerate() }
             // Shields recharge on their own, not just at a wave boundary.
             missilesRemaining = customRules?.missilesPerWave ?? 2
             spawnWave()
