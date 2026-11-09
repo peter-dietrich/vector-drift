@@ -1,0 +1,65 @@
+// !$*UTF8*$!
+{
+ archiveVersion = 1;
+ classes = {};
+ objectVersion = 56;
+ objects = {
+  A1 = { isa = PBXBuildFile; fileRef = A2; };
+  A2 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VectorDriftApp.swift; sourceTree = "<group>"; };
+  A3 = { isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VectorDrift.app; sourceTree = BUILT_PRODUCTS_DIR; };
+  A4 = { isa = PBXGroup; children = (A2, A5); sourceTree = "<group>"; };
+  A5 = { isa = PBXGroup; children = (A3); name = Products; sourceTree = "<group>"; };
+  A6 = {
+   isa = PBXNativeTarget;
+   buildConfigurationList = A9;
+   buildPhases = (A8);
+   buildRules = ();
+   dependencies = ();
+   name = VectorDrift;
+   productName = VectorDrift;
+   productReference = A3;
+   productType = "com.apple.product-type.application";
+  };
+  A7 = {
+   isa = PBXProject;
+   attributes = { LastUpgradeCheck = 1600; TargetAttributes = { A6 = { CreatedOnToolsVersion = 16.0; }; }; };
+   buildConfigurationList = B0;
+   compatibilityVersion = "Xcode 14.0";
+   developmentRegion = en;
+   hasScannedForEncodings = 0;
+   knownRegions = (en, Base);
+   mainGroup = A4;
+   productRefGroup = A5;
+   projectDirPath = "";
+   projectRoot = "";
+   targets = (A6);
+  };
+  A8 = { isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A1); runOnlyForDeploymentPostprocessing = 0; };
+  A9 = { isa = XCConfigurationList; buildConfigurations = (B1, B2); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+  B0 = { isa = XCConfigurationList; buildConfigurations = (B3, B4); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+  B1 = { isa = XCBuildConfiguration; buildSettings = {
+   CODE_SIGNING_ALLOWED = NO;
+   GENERATE_INFOPLIST_FILE = YES;
+   INFOPLIST_KEY_CFBundleDisplayName = "Vector Drift";
+   INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
+   MACOSX_DEPLOYMENT_TARGET = 13.0;
+   PRODUCT_BUNDLE_IDENTIFIER = "io.vectordrift.prototype";
+   PRODUCT_NAME = "$(TARGET_NAME)";
+   SWIFT_VERSION = 5.0;
+  }; name = Debug; };
+  B2 = { isa = XCBuildConfiguration; buildSettings = {
+   CODE_SIGNING_ALLOWED = NO;
+   GENERATE_INFOPLIST_FILE = YES;
+   INFOPLIST_KEY_CFBundleDisplayName = "Vector Drift";
+   INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
+   MACOSX_DEPLOYMENT_TARGET = 13.0;
+   PRODUCT_BUNDLE_IDENTIFIER = "io.vectordrift.prototype";
+   PRODUCT_NAME = "$(TARGET_NAME)";
+   SWIFT_OPTIMIZATION_LEVEL = "-O";
+   SWIFT_VERSION = 5.0;
+  }; name = Release; };
+  B3 = { isa = XCBuildConfiguration; buildSettings = { CODE_SIGNING_ALLOWED = NO; SDKROOT = macosx; MACOSX_DEPLOYMENT_TARGET = 13.0; SWIFT_VERSION = 5.0; }; name = Debug; };
+  B4 = { isa = XCBuildConfiguration; buildSettings = { CODE_SIGNING_ALLOWED = NO; SDKROOT = macosx; MACOSX_DEPLOYMENT_TARGET = 13.0; SWIFT_OPTIMIZATION_LEVEL = "-O"; SWIFT_VERSION = 5.0; }; name = Release; };
+ };
+ rootObject = A7;
+}
