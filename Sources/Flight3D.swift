@@ -472,7 +472,7 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
         nuclearMissile = NuclearMissile3D(node: node,
             velocity: add(multiply(shipVelocity, 0.35), multiply(heading, 42)),
             fuse: 2.1)
-        if soundEnabled { ArcadeAudio.shared.play(.comet) }
+        if soundEnabled { ArcadeAudio.shared.play(.fire) }
     }
 
     private func updateNuclearMissile(_ dt: CGFloat) {
@@ -511,7 +511,7 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
             rocks.remove(at: index)
             score += 20 * (6 - rock.level)
         }
-        if soundEnabled { ArcadeAudio.shared.play(.comet) }
+        if soundEnabled { ArcadeAudio.shared.play(.nuclear) }
     }
 
     private func radius(for level: Int) -> CGFloat {
