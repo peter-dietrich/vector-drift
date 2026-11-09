@@ -443,6 +443,10 @@ private struct NuclearMissile {
     var velocity: CGVector
     var fuse: CGFloat
 }
+private struct BlackHoleEvent {
+    var node: SKNode
+    var remaining: CGFloat
+}
 
 final class DriftScene: SKScene {
     var modern = false { didSet { updateStyle() } }
@@ -454,6 +458,9 @@ final class DriftScene: SKScene {
     private var shockwaves: [Shockwave] = []
     private var nuclearMissile: NuclearMissile?
     private var missilesRemaining = 2
+    private var blackHole: BlackHoleEvent?
+    private var lastBlackHole: CGFloat = 0
+    private var nextBlackHoleDelay: CGFloat = 26
     private var lastComet: CGFloat = 0
     private var nextCometDelay: CGFloat = 13
     private var nextSpark: CGFloat = 0
@@ -547,6 +554,8 @@ final class DriftScene: SKScene {
         boulders.forEach { $0.node.removeFromParent() }
         lasers.forEach { $0.node.removeFromParent() }
         clearSpecialEffects()
+        blackHole?.node.removeFromParent()
+        blackHole = nil
         nuclearMissile?.node.removeFromParent()
         nuclearMissile = nil
         clearEnemies()
@@ -563,6 +572,8 @@ final class DriftScene: SKScene {
         shieldRechargeRemaining = 0
         missilesRemaining = customRules?.missilesPerWave ?? 2
         lastComet = 0
+        lastBlackHole = 0
+        nextBlackHoleDelay = CGFloat.random(in: 24...36)
         nextCometDelay = CGFloat.random(in: difficulty.cometDelay)
         lastSaucer = 0
         nextSaucerDelay = CGFloat.random(in: difficulty.saucerDelay)
@@ -697,6 +708,7 @@ final class DriftScene: SKScene {
                                 remaining: CGFloat(customRules?.bulletLifetime ?? Double(difficulty.bulletLifetime))))
         }
 
+        updateBlackHole(dt)
         for i in boulders.indices {
             let next = CGPoint(x: boulders[i].node.position.x + boulders[i].velocity.dx * dt,
                                y: boulders[i].node.position.y + boulders[i].velocity.dy * dt)
