@@ -32,6 +32,20 @@ A GitHub Actions macOS build runs on pushes to `main` and pull requests. This is
 
 Click inside the playfield for keyboard focus. In **3D Flight**, left/right arrows yaw, **I/K** pitch, **Q/E** roll, **W/X** rise/dive, **A/D** strafe; Up thrusts forward and Down reverses. Space fires, S shields and N launches a missile.
 
+## v0.10 — Vector Nebula v2: all five graphics upgrades
+
+Modern now uses **original procedural vector-authored art** rather than downloading telescope photographs. The scene is built once per mode activation from smooth cubic Bézier cloud contours, vector stars, galaxy ellipses, filaments, and dust, then rendered into multiple transparent textures for fast SpriteKit animation. This eliminates floating rectangular photo panels. It does not use NASA images or a network connection.
+
+- **1. Organic Bézier contours:** low-frequency radial modulation and cubic control points produce soft, varied gas boundaries (rather than polygons or circles scattered uniformly).
+- **2. Distinct gas blur depths:** broad distant cloud masses (34-point-equivalent Gaussian blur), medium gas (17), near structured clouds (5), and crisp filament highlights remain separate.
+- **3. Living internal motion:** a shared GPU flow/noise shader warps the cloud content itself instead of shifting a still image. Independently phased layers breathe and shift at different rates.
+- **4. Star clusters:** a broad field of small dim stars, four tighter stellar clusters (hundreds of clustered stars), a few bright six-spike diffraction stars and faint vector galaxies.
+- **5. Whole-field black-hole lensing:** the same spatial deflection operates on stars, clouds, filaments, and near dust, so light bends coherently around the black hole.
+
+The layers react to ship velocity with distinct parallax factors (near dust moves the most), and hyperspace briefly zooms the image contents. The existing asteroid-belt density influences dust opacity. Classical rendering and game rules are unchanged.
+
+The renderer uses original vector geometry but caches rendered transparent layers in textures, rather than recomputing every path per frame. All effects are offline. Modern screenshot and GPU performance testing on a Mac are still required.
+
 ## v0.9.1 — Seamless nebula field (fix for floating photo panels)
 
 The prior v0.9 experiment displayed three independent rectangular photograph sprites. Those overlapping panels and their edges were visible in gameplay, defeating the cinematic effect. This is now replaced by **one fixed, full-viewport canvas** with a GPU shader that samples two NASA photo textures, continuously warps the sampled coordinates, and blends the second image only inside slowly evolving, irregular cloud masks.
