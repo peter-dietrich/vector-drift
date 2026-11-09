@@ -96,11 +96,46 @@ fileprivate enum Difficulty: String, CaseIterable, Identifiable {
         }
     }
 
-    var initialAsteroids: Int {
+    /// Asteroid size tiers include small fragments at level 1.
+    var maximumRockLevel: Int {
         switch self {
         case .easy: return 3
         case .medium: return 4
         case .hard: return 5
+        }
+    }
+
+    /// Easy's current starting density stays unchanged; Hard starts
+    /// denser and adds two rocks per successive wave until capped.
+    func rockCount(forWave wave: Int) -> Int {
+        let additional = max(wave - 1, 0)
+        switch self {
+        case .easy: return min(3 + additional, 12)
+        case .medium: return min(4 + additional, 13)
+        case .hard: return min(7 + additional * 2, 19)
+        }
+    }
+
+    /// Populate a wave with a mix of large rocks; a hit splits to the next
+    /// smaller tier all the way down to size 1.
+    func startingRockLevel(at index: Int) -> Int {
+        switch self {
+        case .easy:
+            return 3
+        case .medium:
+            return index.isMultiple(of: 3) ? 4 : 3
+        case .hard:
+            if index.isMultiple(of: 4) { return 5 }
+            return index.isMultiple(of: 3) ? 4 : 3
+        }
+    }
+
+    func hitsToSplit(level: Int) -> Int {
+        guard self == .hard else { return 1 }
+        switch level {
+        case 5: return 3
+        case 4: return 2
+        default: return 1
         }
     }
 }
@@ -249,7 +284,9 @@ private struct Boulder {
     var spin: CGFloat
     var detail: SKNode
     var hitPoints: Int
+    let maximumHitPoints: Int
     var crack: SKShapeNode
+    var secondCrack: SKShapeNode
     var lastShieldImpact: CGFloat
 }
 private struct Laser {
@@ -547,15 +584,21 @@ final class DriftScene: SKScene {
                 lasers.remove(at: i).node.removeFromParent()
                 if boulders[j].hitPoints > 1 {
                     boulders[j].hitPoints -= 1
-                    boulders[j].crack.isHidden = false
-                    boulders[j].node.lineWidth = 3
-                    boulders[j].node.strokeColor = modern ? ModernVisuals.fire : .yellow
+                    let rock = boulders[j]
+                    let damageStage = rock.maximumHitPoints - rock.hitPoints
+                    rock.crack.isHidden = false
+                    rock.secondCrack.isHidden = damageStage < 2
+                    rock.node.lineWidth = damageStage == 1 ? 3 : 3.8
+                    rock.node.strokeColor = modern
+                        ? (damageStage == 1 ? ModernVisuals.fire : .systemRed)
+                        : (damageStage == 1 ? .yellow : .orange)
                     ArcadeAudio.shared.play(.rock)
                     if modern {
-                        ModernVisuals.burst(in: self, at: boulders[j].node.position,
-                                            color: ModernVisuals.fire, count: 7)
+                        ModernVisuals.burst(in: self, at: rock.node.position,
+                                            color: damageStage == 1 ? ModernVisuals.fire : .systemRed,
+                                            count: 5 + rock.level * 2)
                     }
-                    continue
+                    continue // A hit changes its appearance, never its size.
                 }
                 let rock = boulders.remove(at: j)
                 rock.node.removeFromParent()
@@ -564,7 +607,10 @@ final class DriftScene: SKScene {
                     ModernVisuals.burst(in: self, at: rock.node.position,
                                         color: ModernVisuals.ice, count: rock.level * 5)
                 }
-                award(rock.level == 4 ? 60 : rock.level == 3 ? 20 : rock.level == 2 ? 50 : 100)
+                award(rock.level == 5 ? 90 :
+                      rock.level == 4 ? 60 :
+                      rock.level == 3 ? 20 :
+                      rock.level == 2 ? 50 : 100)
                 if rock.level > 1 {
                     for direction in [-0.75, 0.75] as [CGFloat] {
                         let angle = atan2(rock.velocity.dy, rock.velocity.dx) + direction
@@ -653,35 +699,62 @@ final class DriftScene: SKScene {
                 dx: velocity.dx + reflectedX,
                 dy: velocity.dy + reflectedY
             )
+            // Larger rock masses transfer a more substantial recoil to
+            // the shielded ship without consuming shield energy on impact.
+            let impactSpeed = -approach
+            let massFactor: CGFloat = rock.level == 5 ? 0.42 :
+                                      rock.level == 4 ? 0.30 :
+                                      rock.level == 3 ? 0.22 : 0.12
+            let recoil = min(95, impactSpeed * massFactor)
+            velocity.dx -= normalX * recoil
+            velocity.dy -= normalY * recoil
+            let shipSpeed = hypot(velocity.dx, velocity.dy)
+            if shipSpeed > 440 {
+                velocity.dx *= 440 / shipSpeed
+                velocity.dy *= 440 / shipSpeed
+            }
+
             if elapsed - rock.lastShieldImpact > 0.12 {
                 boulders[index].lastShieldImpact = elapsed
                 let hitPoint = CGPoint(
                     x: ship.position.x + normalX * shieldRadius,
                     y: ship.position.y + normalY * shieldRadius
                 )
-                shieldImpact(at: hitPoint)
+                shieldImpact(at: hitPoint, rockLevel: rock.level)
                 ArcadeAudio.shared.play(.bounce)
             }
         }
     }
 
-    private func shieldImpact(at point: CGPoint) {
-        let ripple = SKShapeNode(circleOfRadius: 8)
+    private func shieldImpact(at point: CGPoint, rockLevel: Int) {
+        // The shield visibly compresses and rebounds when struck. Animating
+        // the outer ring (not the parent node) leaves its idle pulse intact.
+        if let outline = shieldNode.childNode(withName: "shieldOutline") {
+            outline.removeAction(forKey: "impactFlex")
+            let compression: CGFloat = rockLevel >= 4 ? 0.82 : 0.92
+            outline.run(.sequence([
+                .scale(to: compression, duration: 0.07),
+                .scale(to: 1.08, duration: 0.13),
+                .scale(to: 1, duration: 0.15)
+            ]), withKey: "impactFlex")
+        }
+        let radius = CGFloat(6 + rockLevel * 2)
+        let ripple = SKShapeNode(circleOfRadius: radius)
         ripple.position = point
         ripple.strokeColor = modern ? ModernVisuals.ice : .white
         ripple.fillColor = .clear
-        ripple.lineWidth = 2.4
-        ripple.glowWidth = modern ? 9 : 0
+        ripple.lineWidth = rockLevel >= 4 ? 3.5 : 2
+        ripple.glowWidth = modern ? CGFloat(6 + rockLevel * 2) : 0
         ripple.zPosition = 11
         addChild(ripple)
         ripple.run(.sequence([
-            .group([.scale(to: 2.8, duration: 0.27),
-                    .fadeOut(withDuration: 0.27)]),
+            .group([.scale(to: rockLevel >= 4 ? 3.6 : 2.8, duration: 0.34),
+                    .fadeOut(withDuration: 0.34)]),
             .removeFromParent()
         ]))
         if modern {
-            ModernVisuals.burst(in: self, at: point,
-                                color: ModernVisuals.ice, count: 6)
+            ModernVisuals.burst(in: self, at: point, color: ModernVisuals.ice,
+                                count: 4 + rockLevel * 4)
         }
     }
 
@@ -695,26 +768,24 @@ final class DriftScene: SKScene {
     }
 
     private func spawnWave() {
-        if difficulty == .hard && wave >= 2 {
-            for _ in 0..<min(1 + (wave - 2) / 3, 3) {
-                let point = CGPoint(x: CGFloat.random(in: 80...max(81, size.width - 80)),
-                                    y: CGFloat.random(in: 80...max(81, size.height - 80)))
-                let angle = CGFloat.random(in: 0...(2 * .pi))
-                let speed = rockSpeed(for: 4)
-                spawnRock(level: 4, at: point,
-                          velocity: CGVector(dx: cos(angle) * speed, dy: sin(angle) * speed))
-            }
-        }
-        for _ in 0..<min(difficulty.initialAsteroids + wave - 1, 12) {
+        for index in 0..<difficulty.rockCount(forWave: wave) {
+            let level = difficulty.startingRockLevel(at: index)
+            let radius = rockRadius(for: level)
+            // The larger tiers require extra separation from the player.
+            let margin = max(40, radius + 8)
             var point = CGPoint.zero
-            for _ in 0..<30 {
-                point = CGPoint(x: .random(in: 40...max(41, size.width - 40)),
-                                y: .random(in: 40...max(41, size.height - 40)))
-                if hypot(point.x - ship.position.x, point.y - ship.position.y) > 170 { break }
+            for _ in 0..<35 {
+                point = CGPoint(
+                    x: .random(in: margin...max(margin + 1, size.width - margin)),
+                    y: .random(in: margin...max(margin + 1, size.height - margin))
+                )
+                if hypot(point.x - ship.position.x, point.y - ship.position.y) > radius + 145 {
+                    break
+                }
             }
             let angle = CGFloat.random(in: 0...(2 * .pi))
-            let speed = rockSpeed(for: 3)
-            spawnRock(level: 3, at: point,
+            let speed = rockSpeed(for: level)
+            spawnRock(level: level, at: point,
                       velocity: CGVector(dx: cos(angle) * speed, dy: sin(angle) * speed))
         }
     }
@@ -724,7 +795,8 @@ final class DriftScene: SKScene {
     private func rockSpeed(for level: Int) -> CGFloat {
         let baseRange: ClosedRange<CGFloat>
         switch level {
-        case 4: baseRange = 20...38
+        case 5: baseRange = 12...23
+        case 4: baseRange = 22...39
         case 3: baseRange = 36...68
         case 2: baseRange = 85...118
         default: baseRange = 138...190
@@ -733,11 +805,21 @@ final class DriftScene: SKScene {
         return CGFloat.random(in: baseRange) * difficulty.speedMultiplier * waveFactor
     }
 
+    private func rockRadius(for level: Int) -> CGFloat {
+        switch level {
+        case 5: return 96
+        case 4: return 68
+        case 3: return 43
+        case 2: return 27
+        default: return 15
+        }
+    }
+
     private func spawnRock(level: Int, at point: CGPoint, velocity: CGVector) {
-        let radius: CGFloat = level == 4 ? 68 : level == 3 ? 43 : level == 2 ? 27 : 15
+        let radius = rockRadius(for: level)
         let path = CGMutablePath()
         var points: [CGPoint] = []
-        let vertices = level == 4 ? 17 : 12
+        let vertices = level == 5 ? 21 : level == 4 ? 17 : 12
         for i in 0..<vertices {
             let angle = 2 * CGFloat.pi * CGFloat(i) / CGFloat(vertices)
             let radiusVariation = CGFloat.random(in: 0.7...1.14)
@@ -755,10 +837,18 @@ final class DriftScene: SKScene {
         node.addChild(detail)
         let crack = ArcadeEffects.damageCrack(radius: radius)
         node.addChild(crack)
+        let secondCrack = ArcadeEffects.damageCrack(radius: radius)
+        secondCrack.zRotation = .pi * 0.73
+        secondCrack.setScale(0.85)
+        node.addChild(secondCrack)
         addChild(node)
+        let hitPoints = difficulty.hitsToSplit(level: level)
+        let spinSpeed = CGFloat.random(in: -1.2...1.2) /
+            (1 + CGFloat(max(level - 3, 0)) * 0.5)
         boulders.append(Boulder(node: node, velocity: velocity, radius: radius,
-                                level: level, spin: .random(in: -1.2...1.2), detail: detail,
-                                hitPoints: level == 4 ? 2 : 1, crack: crack,
+                                level: level, spin: spinSpeed, detail: detail,
+                                hitPoints: hitPoints, maximumHitPoints: hitPoints,
+                                crack: crack, secondCrack: secondCrack,
                                 lastShieldImpact: -10))
         styleRock(node, detail: detail)
     }
@@ -780,9 +870,19 @@ final class DriftScene: SKScene {
         message.fontColor = color
         for rock in boulders {
             styleRock(rock.node, detail: rock.detail)
-            if !rock.crack.isHidden {
-                rock.crack.strokeColor = modern ? ModernVisuals.fire : .yellow
+            let damageStage = rock.maximumHitPoints - rock.hitPoints
+            if damageStage > 0 {
+                rock.node.lineWidth = damageStage == 1 ? 3 : 3.8
+                rock.node.strokeColor = modern
+                    ? (damageStage == 1 ? ModernVisuals.fire : .systemRed)
+                    : (damageStage == 1 ? .yellow : .orange)
+            } else {
+                rock.node.lineWidth = 1.7
             }
+            rock.crack.isHidden = damageStage == 0
+            rock.secondCrack.isHidden = damageStage < 2
+            rock.crack.strokeColor = modern ? ModernVisuals.fire : .yellow
+            rock.secondCrack.strokeColor = modern ? .systemRed : .orange
         }
         ArcadeEffects.updateShield(shieldNode, modern: modern,
                                    remaining: shieldActive ? shieldEnergy : 0,
@@ -982,7 +1082,10 @@ final class DriftScene: SKScene {
                 shockwaves[i].hit.insert(identity)
                 let removed = boulders.remove(at: j)
                 removed.node.removeFromParent()
-                award(removed.level == 3 ? 40 : removed.level == 2 ? 100 : 200)
+                award(removed.level == 5 ? 180 :
+                      removed.level == 4 ? 120 :
+                      removed.level == 3 ? 40 :
+                      removed.level == 2 ? 100 : 200)
                 if modern {
                     ModernVisuals.burst(in: self, at: removed.node.position,
                                         color: ModernVisuals.ice, count: 11)
