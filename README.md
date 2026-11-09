@@ -1,5 +1,7 @@
 # Vector Drift
 
+Native macOS arcade space shooter with Classic, Modern and true XYZ 3D Flight modes.
+
 A native macOS arcade space shooter with two independent presentation modes: **Classic** monochrome vectors and **Modern Vector** with original procedural effects. Not affiliated with Atari.
 
 ## Build
@@ -20,19 +22,20 @@ A GitHub Actions macOS build runs on pushes to `main` and pull requests. This is
 | Left / right arrows | Rotate |
 | Up arrow | Thrust |
 | Space | Fire |
-| **S** | Toggle shield on/off, using a limited energy budget |
+| **S** | Activate or end a reusable shield; it recharges automatically |
 | Down arrow | Hyperspace (cooldown varies by difficulty) |
+| **N** | Launch a drifting thermonuclear area missile (default 2 per wave) |
 | P | Pause/resume |
 | Hold Up arrow | Continuous engine-thrust rumble while accelerating |
 | R or Command-R | Restart |
-| Toolbar | Choose graphics, difficulty, toggle sound, see scores |
+| Toolbar | Switch Classic / Modern / 3D Flight, choose difficulty, Custom Game, Save Game, Resume, sound and scores |
 
-Click inside the playfield for keyboard focus.
+Click inside the playfield for keyboard focus. In **3D Flight**, left/right arrows yaw, **I/K** pitch, **Q/E** roll, **W/X** rise/dive, **A/D** strafe; Up thrusts forward and Down reverses. Space fires, S shields and N launches a missile.
 
-## v0.6 features (textured asteroid rendering, renewable shields and HUD redesign)
+## v0.7 features (custom rule presets, save/resume, black holes, 3D flight and nuclear missile)
 
-- Two graphics modes, with distinct procedural graphics and effects
-- Three difficulty settings independent of graphics mode
+- Three presentation modes: Classic wireframe 2D, Modern textured 2D, and fully spatial 3D Flight powered by SceneKit
+- Built-in Easy / Medium / Hard plus **Custom Game** with named persistent rule presets. Change bullet count and lifetime, fire rate, shield duration/cooldown, rock starting count, wave growth, maximum asteroid size, hits to split, asteroid speed, lives, comets, UFOs, black holes, missiles per wave, and edge physics (wrap or bounce). Presets save locally on the Mac.
 - **Unlimited reusable shields** in both modes: S activates a timed shield, and S again ends it early and starts recharge. After 7 seconds on Easy / 5 on Medium / 3 on Hard, the shield automatically expires. Recharge takes 5 / 7 / 9 seconds respectively, then the shield becomes ready to activate again. Shield timer and recharge both pause with gameplay.
 - Incoming asteroids bounce off an active shield, retaining their health and splitting behavior. Larger rocks now push the ship backward harder and cause a visibly stronger, flexing shield ripple with extra Modern Vector particles.
 - Holding thrust plays a low continuous synthesized engine roar, stopping promptly when thrust stops, the window loses input focus, the game pauses, or sound is disabled.
@@ -45,10 +48,13 @@ Click inside the playfield for keyboard focus.
 - Modern's drifting stars, glowing damage flares, instability arcs and multi-layer debris remain available.
 - **Interface redesign:** separate title/actions and mode-selection rows, less crowded score/status HUD, clear shield READY / ACTIVE / RECHARGING indicator, and centered overlay behind title/game-over text. Classic stays visually restrained.
 - Comet special events in Modern and, on Hard, Classic; Hard comet intervals are much shorter
+- Rare black holes from wave 3 attract ships, rocks, projectiles and missiles. Thrust can escape at distance, but reaching the event horizon destroys the unprotected or shielded ship. Modern 2D pulses the starfield to suggest gravitational lensing; 3D uses a spatial gravity well.
+- **N-key thermonuclear missile:** forward launch, short drifting fuse, and a large explosion that clears objects in its radius. The 2D circular blast is sized to about 33% of the playfield area (before clipping). The 3D spherical blast spans approximately one third of the XYZ arena width. Default two missiles per wave, replenished every wave, custom range 0–10.
 - Comet shot creates an expanding asteroid-clearing shockwave and a 750-point bonus
 - Enemy UFO saucers with aimed shots, more accurate and frequent on Hard
 - Original procedural arcade sounds, user-controllable sound toggle
 - Title screen and persistent local top-five scores per difficulty
+- **Save Game** records active 2D or 3D progress in local Mac storage; **Resume** restores lives, wave, score, position, moving rocks, bullets, damage timers, shield cooldown, missiles and black-hole state. Up to 12 recent checkpoints per engine. Saved games survive app restarts; 2D procedurally regenerated rock surface details may differ.
 - Classic yellow ship-death flash and flying fragments; Modern includes brighter debris effects
 - Visible difficulty and graphics buttons with an explicit selected state
 
@@ -72,9 +78,14 @@ Click inside the playfield for keyboard focus.
 | Added rocks per wave | +1 | +1 | +2 |
 | Maximum starting rocks per wave | 12 | 13 | 19 |
 | Giant hit points | size 3: 2 | size 4: 2 | size 4: 2; size 5: 3 |
+| Default thermonuclear missiles / wave | 2 | 2 | 2 |
 | Damaged rock fracture timer | 10 s | 10 s | 10 s first hit, at most 5 s after second nonfatal hit |
 
 Comet and UFO spawns begin in wave 2. Classic mode only gets comet events on Hard. Switching difficulty starts a new game.
+
+## Storage and limitations
+
+Presets and saved games use macOS `UserDefaults`, stored locally in this app's preference domain. They do not sync between devices. Saved play is resumed through the **Resume** button, not through Xcode run-state restoration. Presets and save formats are prototype v1; upgrades should migrate them deliberately. The 3D camera, physics, visuals and interface are early playable prototypes and are not yet parity-complete with the 2D modes. These changes must pass macOS CI and hands-on testing before release.
 
 ## Future improvements
 
