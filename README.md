@@ -32,6 +32,15 @@ A GitHub Actions macOS build runs on pushes to `main` and pull requests. This is
 
 Click inside the playfield for keyboard focus. In **3D Flight**, left/right arrows yaw, **I/K** pitch, **Q/E** roll, **W/X** rise/dive, **A/D** strafe; Up thrusts forward and Down reverses. Space fires, S shields and N launches a missile.
 
+## v0.8 features (deep-space skies and asteroid-belt passages)
+
+- **Modern mode starfield:** a procedural star atlas with roughly a thousand dim stars, ~110 moderately bright stars, and nine prominent six-ray telescope-style stars. Lower average brightness keeps bullets and asteroids readable.
+- **Distant galaxies:** seven faint rotated, varied elliptical/edge-on galaxy patches and a very subtle wide stellar dust lane, all created by code without bundling telescope images.
+- **Living nebula:** three softly colored, semi-transparent cloud layers move, gently scale, and vary their opacity at different rates. An additional faint dust belt brightens as asteroid traffic becomes denser.
+- **Asteroid belt density:** ordinary Modern games move through broad, slowly varying belt densities. Wave-start counts change moderately (roughly 0.78–1.31×) and rare extra smaller rocks drift in from the edge during dense stretches. A cap and a no-replenishment rule near the end of a wave prevent endlessly busy rounds. Classic retains its original counts; Custom Game presets retain their chosen exact asteroid counts, even in Modern.
+- **Dark black holes:** Modern now uses dark cores with understated silver-gray rings instead of brightly colored accents. A SpriteKit shader bends the sampled starfield near the black hole, returning smoothly to normal after the hazard ends. The effect is an artistic approximation of gravitational lensing, not a physical relativity simulation.
+- **Performance approach:** background stars and galaxies are baked once into a single texture; only a few nebula/dust sprites animate. No additional download assets. The existing 3D Flight background is unchanged by this Modern-specific pass.
+
 ## v0.7 features (custom rule presets, save/resume, black holes, 3D flight and nuclear missile)
 
 - Three presentation modes: Classic wireframe 2D, Modern textured 2D, and fully spatial 3D Flight powered by SceneKit
