@@ -12,6 +12,7 @@
   00000000000000000000007D = { isa = PBXBuildFile; fileRef = 00000000000000000000007E; };
   00000000000000000000007F = { isa = PBXBuildFile; fileRef = 000000000000000000000080; };
   000000000000000000000081 = { isa = PBXBuildFile; fileRef = 000000000000000000000082; };
+  000000000000000000000083 = { isa = PBXBuildFile; fileRef = 000000000000000000000084; };
   000000000000000000000079 = { isa = PBXBuildFile; fileRef = 00000000000000000000007A; };
   000000000000000000000066 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/VectorDriftApp.swift; sourceTree = "<group>"; };
   000000000000000000000074 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ModernVisuals.swift; sourceTree = "<group>"; };
@@ -21,9 +22,10 @@
   00000000000000000000007E = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ModernSpaceBackdrop.swift; sourceTree = "<group>"; };
   000000000000000000000080 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ModernCinematicSky.swift; sourceTree = "<group>"; };
   000000000000000000000082 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/VectorNebulaField.swift; sourceTree = "<group>"; };
+  000000000000000000000084 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/BlackHoleArtwork.swift; sourceTree = "<group>"; };
   00000000000000000000007A = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/GamePreferences.swift; sourceTree = "<group>"; };
   000000000000000000000067 = { isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VectorDrift.app; sourceTree = BUILT_PRODUCTS_DIR; };
-  000000000000000000000068 = { isa = PBXGroup; children = (000000000000000000000066, 000000000000000000000074, 000000000000000000000076, 000000000000000000000078, 00000000000000000000007A, 00000000000000000000007C, 00000000000000000000007E, 000000000000000000000080, 000000000000000000000082, 000000000000000000000069); sourceTree = "<group>"; };
+  000000000000000000000068 = { isa = PBXGroup; children = (000000000000000000000066, 000000000000000000000074, 000000000000000000000076, 000000000000000000000078, 00000000000000000000007A, 00000000000000000000007C, 00000000000000000000007E, 000000000000000000000080, 000000000000000000000082, 000000000000000000000084, 000000000000000000000069); sourceTree = "<group>"; };
   000000000000000000000069 = { isa = PBXGroup; children = (000000000000000000000067); name = Products; sourceTree = "<group>"; };
   00000000000000000000006A = {
    isa = PBXNativeTarget;
@@ -50,7 +52,7 @@
    projectRoot = "";
    targets = (00000000000000000000006A);
   };
-  00000000000000000000006C = { isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (000000000000000000000065, 000000000000000000000073, 000000000000000000000075, 000000000000000000000077, 000000000000000000000079, 00000000000000000000007B, 00000000000000000000007D, 00000000000000000000007F, 000000000000000000000081); runOnlyForDeploymentPostprocessing = 0; };
+  00000000000000000000006C = { isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (000000000000000000000065, 000000000000000000000073, 000000000000000000000075, 000000000000000000000077, 000000000000000000000079, 00000000000000000000007B, 00000000000000000000007D, 00000000000000000000007F, 000000000000000000000081, 000000000000000000000083); runOnlyForDeploymentPostprocessing = 0; };
   00000000000000000000006D = { isa = XCConfigurationList; buildConfigurations = (00000000000000000000006F, 000000000000000000000070); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
   00000000000000000000006E = { isa = XCConfigurationList; buildConfigurations = (000000000000000000000071, 000000000000000000000072); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
   00000000000000000000006F = { isa = XCBuildConfiguration; buildSettings = {
