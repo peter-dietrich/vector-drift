@@ -351,6 +351,12 @@ private struct Shockwave {
     var elapsed: CGFloat
     var ring: SKShapeNode
     var hit: Set<ObjectIdentifier>
+    var maxRadius: CGFloat
+}
+private struct NuclearMissile {
+    var node: SKNode
+    var velocity: CGVector
+    var fuse: CGFloat
 }
 
 final class DriftScene: SKScene {
@@ -360,6 +366,8 @@ final class DriftScene: SKScene {
     private var lasers: [Laser] = []
     private var comet: Comet?
     private var shockwaves: [Shockwave] = []
+    private var nuclearMissile: NuclearMissile?
+    private var missilesRemaining = 2
     private var lastComet: CGFloat = 0
     private var nextCometDelay: CGFloat = 13
     private var nextSpark: CGFloat = 0
@@ -453,6 +461,8 @@ final class DriftScene: SKScene {
         boulders.forEach { $0.node.removeFromParent() }
         lasers.forEach { $0.node.removeFromParent() }
         clearSpecialEffects()
+        nuclearMissile?.node.removeFromParent()
+        nuclearMissile = nil
         clearEnemies()
         boulders.removeAll()
         lasers.removeAll()
@@ -465,6 +475,7 @@ final class DriftScene: SKScene {
         shieldActive = false
         shieldEnergy = difficulty.shieldDuration
         shieldRechargeRemaining = 0
+        missilesRemaining = customRules?.missilesPerWave ?? 2
         lastComet = 0
         nextCometDelay = CGFloat.random(in: difficulty.cometDelay)
         lastSaucer = 0
@@ -527,6 +538,8 @@ final class DriftScene: SKScene {
                 shieldNode.isHidden = false
                 ArcadeAudio.shared.play(.shield)
             }
+        case 45: // N: launch a drifting high-yield missile.
+            if !stopped { launchNuclearMissile() }
         case 35: // P
             if !over {
                 stopped.toggle()
@@ -629,8 +642,9 @@ final class DriftScene: SKScene {
 
         if modern || difficulty == .hard {
             updateComet(dt)
-            updateShockwaves(dt)
         }
+        updateNuclearMissile(dt)
+        updateShockwaves(dt)
         updateSaucer(dt)
         updateEnemyShots(dt)
         for i in lasers.indices.reversed() {
@@ -717,6 +731,7 @@ final class DriftScene: SKScene {
         if boulders.isEmpty && shockwaves.isEmpty {
             wave += 1
             // Shields recharge on their own, not just at a wave boundary.
+            missilesRemaining = customRules?.missilesPerWave ?? 2
             spawnWave()
             ArcadeAudio.shared.play(.wave)
             protectedUntil = elapsed + 1.5
@@ -995,7 +1010,7 @@ final class DriftScene: SKScene {
         } else {
             shieldStatus = "SHIELD READY [S]"
         }
-        statusHUD.text = "LIVES \(lives)    \(difficulty.title.uppercased())    \(shieldStatus)"
+        statusHUD.text = "LIVES \(lives)  NUKES \(missilesRemaining)  \(difficulty.title.uppercased())  \(shieldStatus)"
     }
 
     private func updateStyle() {
@@ -1085,6 +1100,8 @@ final class DriftScene: SKScene {
         comet?.node.removeFromParent()
         comet = nil
         for wave in shockwaves { wave.ring.removeFromParent() }
+        nuclearMissile?.node.removeFromParent()
+        nuclearMissile = nil
         shockwaves.removeAll()
         children.filter { $0.name == "modernEffect" }.forEach { $0.removeFromParent() }
     }
@@ -1194,6 +1211,84 @@ final class DriftScene: SKScene {
         comet = Comet(node: node, velocity: v, remaining: (size.width + 140) / speed + 1)
     }
 
+    private func launchNuclearMissile() {
+        guard missilesRemaining > 0, nuclearMissile == nil, !over, !titleVisible else { return }
+        missilesRemaining -= 1
+        let direction = CGVector(dx: -sin(heading), dy: cos(heading))
+        let missile = SKShapeNode(ellipseOf: CGSize(width: 11, height: 19))
+        missile.fillColor = modern ? ModernVisuals.fire : .black
+        missile.strokeColor = modern ? .yellow : .white
+        missile.lineWidth = 2
+        missile.glowWidth = modern ? 12 : 0
+        missile.zRotation = heading
+        missile.position = CGPoint(x: ship.position.x + direction.dx * 26,
+                                   y: ship.position.y + direction.dy * 26)
+        missile.zPosition = 10
+        addChild(missile)
+        nuclearMissile = NuclearMissile(node: missile,
+            velocity: CGVector(dx: velocity.dx * 0.35 + direction.dx * 125,
+                               dy: velocity.dy * 0.35 + direction.dy * 125),
+            fuse: 1.7)
+        ArcadeAudio.shared.play(.comet)
+        updateHud()
+    }
+
+    private func updateNuclearMissile(_ dt: CGFloat) {
+        guard var missile = nuclearMissile else { return }
+        missile.fuse -= dt
+        missile.node.position = wrapped(
+            CGPoint(x: missile.node.position.x + missile.velocity.dx * dt,
+                    y: missile.node.position.y + missile.velocity.dy * dt), margin: 0)
+        // Slowly decelerates so it appears to drift out from the ship.
+        missile.velocity.dx *= max(0, 1 - dt * 0.85)
+        missile.velocity.dy *= max(0, 1 - dt * 0.85)
+        if modern && Int(elapsed * 18).isMultiple(of: 2) {
+            ModernVisuals.cometSpark(in: self, at: missile.node.position,
+                                     direction: missile.velocity)
+        }
+        if missile.fuse <= 0 {
+            detonateNuclearMissile(at: missile.node.position)
+        } else {
+            nuclearMissile = missile
+        }
+    }
+
+    private func detonateNuclearMissile(at point: CGPoint) {
+        nuclearMissile?.node.removeFromParent()
+        nuclearMissile = nil
+        // A circle with ~33% of the playfield's area, before clipping.
+        let blastArea = size.width * size.height * 0.33
+        let radius = sqrt(blastArea / .pi)
+        let ring = ModernVisuals.shockRing(at: point)
+        ring.strokeColor = modern ? .yellow : .white
+        ring.glowWidth = modern ? 28 : 0
+        ring.lineWidth = 5
+        addChild(ring)
+        shockwaves.append(Shockwave(center: point, elapsed: 0,
+                                    ring: ring, hit: [], maxRadius: radius))
+        if modern {
+            ModernVisuals.fractureBurst(in: self, at: point, radius: radius * 0.3, intensity: 5)
+        }
+        // Destroy enemy hazards within blast radius, sparing the player ship.
+        if let target = saucer, hypot(target.node.position.x - point.x,
+                                      target.node.position.y - point.y) < radius {
+            destroySaucer()
+        }
+        if let target = comet, hypot(target.node.position.x - point.x,
+                                      target.node.position.y - point.y) < radius {
+            target.node.removeFromParent()
+            comet = nil
+            lastComet = elapsed
+        }
+        for i in enemyShots.indices.reversed() {
+            if hypot(enemyShots[i].node.position.x - point.x,
+                     enemyShots[i].node.position.y - point.y) < radius {
+                enemyShots.remove(at: i).node.removeFromParent()
+            }
+        }
+        ArcadeAudio.shared.play(.comet)
+    }
+
     private func detonateComet(at point: CGPoint) {
         comet?.node.removeFromParent()
         comet = nil
@@ -1214,14 +1309,15 @@ final class DriftScene: SKScene {
         }
         addChild(ring)
         shockwaves.append(Shockwave(center: point, elapsed: 0,
-                                    ring: ring, hit: Set<ObjectIdentifier>()))
+                                    ring: ring, hit: Set<ObjectIdentifier>(),
+                                    maxRadius: 350))
     }
 
     private func updateShockwaves(_ dt: CGFloat) {
         for i in shockwaves.indices.reversed() {
             shockwaves[i].elapsed += dt
             let progress = min(shockwaves[i].elapsed / 0.95, 1)
-            let radius: CGFloat = 350 * progress
+            let radius = shockwaves[i].maxRadius * progress
             shockwaves[i].ring.setScale(max(0.01, radius / 12))
             shockwaves[i].ring.alpha = 1 - progress
 
