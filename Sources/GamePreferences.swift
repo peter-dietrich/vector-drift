@@ -31,6 +31,7 @@ struct GameRules: Codable, Equatable {
     var cometEnabled: Bool
     var saucerEnabled: Bool
     var blackHoleEnabled: Bool
+    var missilesPerWave: Int
 
     static func defaults(for difficulty: String) -> GameRules {
         switch difficulty {
@@ -40,21 +41,21 @@ struct GameRules: Codable, Equatable {
                              asteroidsPerWave: 3, waveGrowth: 1, largestRock: 3,
                              largestRockHits: 2, asteroidSpeed: 0.75, startingLives: 5,
                              edgeMode: .wrap, rockMix: .largest,
-                             cometEnabled: true, saucerEnabled: true, blackHoleEnabled: true)
+                             cometEnabled: true, saucerEnabled: true, blackHoleEnabled: true, missilesPerWave: 2)
         case "hard":
             return GameRules(maxBullets: 6, bulletLifetime: 0.55, shotInterval: 0.20,
                              shieldDuration: 3, shieldCooldown: 9,
                              asteroidsPerWave: 7, waveGrowth: 2, largestRock: 5,
                              largestRockHits: 3, asteroidSpeed: 1.32, startingLives: 2,
                              edgeMode: .wrap, rockMix: .mixed,
-                             cometEnabled: true, saucerEnabled: true, blackHoleEnabled: true)
+                             cometEnabled: true, saucerEnabled: true, blackHoleEnabled: true, missilesPerWave: 2)
         default:
             return GameRules(maxBullets: 6, bulletLifetime: 0.95, shotInterval: 0.16,
                              shieldDuration: 5, shieldCooldown: 7,
                              asteroidsPerWave: 4, waveGrowth: 1, largestRock: 4,
                              largestRockHits: 2, asteroidSpeed: 1.0, startingLives: 3,
                              edgeMode: .wrap, rockMix: .mixed,
-                             cometEnabled: true, saucerEnabled: true, blackHoleEnabled: true)
+                             cometEnabled: true, saucerEnabled: true, blackHoleEnabled: true, missilesPerWave: 2)
         }
     }
 
@@ -71,6 +72,7 @@ struct GameRules: Codable, Equatable {
         r.largestRockHits = min(6, max(1, largestRockHits))
         r.asteroidSpeed = min(3, max(0.2, asteroidSpeed))
         r.startingLives = min(15, max(1, startingLives))
+        r.missilesPerWave = min(10, max(0, missilesPerWave))
         return r
     }
 
@@ -170,6 +172,8 @@ struct GameSnapshot: Codable {
     var blackHole: SavedMovingEnemy?
     var timeSinceBlackHole: Double
     var nextBlackHoleDelay: Double
+    var missilesRemaining: Int
+    var missile: SavedProjectile?
 }
 
 struct GameSaveSlot: Codable, Identifiable {
@@ -333,6 +337,7 @@ struct GamePresetEditor: View {
                     Toggle("Enable comets", isOn: $rules.cometEnabled)
                     Toggle("Enable UFO saucers", isOn: $rules.saucerEnabled)
                     Toggle("Enable black holes", isOn: $rules.blackHoleEnabled)
+                    Stepper("Thermonuclear missiles per wave: \(rules.missilesPerWave)", value: $rules.missilesPerWave, in: 0...10)
                 }
             }
             .formStyle(.grouped)
