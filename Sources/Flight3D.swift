@@ -83,6 +83,10 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
     private var shots: [SpaceShot3D] = []
     private var nuclearMissile: NuclearMissile3D?
     private var missilesRemaining = 2
+    private var blackHole: SCNNode?
+    private var blackHoleRemaining: CGFloat = 0
+    private var lastBlackHole: CGFloat = 0
+    private var nextBlackHoleDelay: CGFloat = 29
     private var pressed = Set<UInt16>()
     private var previous: TimeInterval = 0
     private var elapsed: CGFloat = 0
@@ -216,6 +220,11 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
         shots.removeAll()
         nuclearMissile?.node.removeFromParentNode()
         nuclearMissile = nil
+        blackHole?.removeFromParentNode()
+        blackHole = nil
+        blackHoleRemaining = 0
+        lastBlackHole = 0
+        nextBlackHoleDelay = CGFloat.random(in: 25...39)
         missilesRemaining = rules.missilesPerWave
         pressed.removeAll()
         ship.position = SCNVector3Zero
@@ -368,7 +377,8 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
         let maxSpeed: CGFloat = difficulty == "hard" ? 75 : 65
         let magnitude = length(shipVelocity)
         if magnitude > maxSpeed { shipVelocity = multiply(normalize(shipVelocity), maxSpeed) }
-        ship.position = wrapped(add(ship.position, multiply(shipVelocity, dt)))
+        ship.position = moveAtEdge(add(ship.position, multiply(shipVelocity, dt)),
+                                    velocity: &shipVelocity)
 
         if pressed.contains(49) && elapsed - lastShot > CGFloat(rules.shotInterval)
             && shots.count < rules.maxBullets {
@@ -383,9 +393,11 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
             shieldCooldownRemaining = max(0, shieldCooldownRemaining - dt)
         }
 
+        updateBlackHole(dt)
         updateNuclearMissile(dt)
         for i in rocks.indices.reversed() {
-            rocks[i].node.position = wrapped(add(rocks[i].node.position, multiply(rocks[i].velocity, dt)))
+            let next = add(rocks[i].node.position, multiply(rocks[i].velocity, dt))
+            rocks[i].node.position = moveAtEdge(next, velocity: &rocks[i].velocity)
             rocks[i].node.eulerAngles.y += dt * 0.15
             if let remaining = rocks[i].fractureTime {
                 if remaining <= dt {
@@ -397,7 +409,8 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
         }
         for i in shots.indices.reversed() {
             shots[i].remaining -= dt
-            shots[i].node.position = wrapped(add(shots[i].node.position, multiply(shots[i].velocity, dt)))
+            let next = add(shots[i].node.position, multiply(shots[i].velocity, dt))
+            shots[i].node.position = moveAtEdge(next, velocity: &shots[i].velocity)
             if shots[i].remaining <= 0 {
                 shots.remove(at: i).node.removeFromParentNode()
                 continue
@@ -478,8 +491,8 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
     private func updateNuclearMissile(_ dt: CGFloat) {
         guard var missile = nuclearMissile else { return }
         missile.fuse -= dt
-        missile.node.position = wrapped(add(missile.node.position,
-                                             multiply(missile.velocity, dt)))
+        missile.node.position = moveAtEdge(add(missile.node.position,
+                                             multiply(missile.velocity, dt)), velocity: &missile.velocity)
         missile.velocity = multiply(missile.velocity, max(0, 1 - dt * 0.65))
         if missile.fuse > 0 {
             nuclearMissile = missile
@@ -528,6 +541,94 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
             let nextDirection = normalize(add(rock.velocity, multiply(offset, 25)))
             addRock(level: rock.level - 1, at: rock.node.position,
                     velocity: multiply(nextDirection, speed(for: rock.level - 1)))
+        }
+    }
+
+    private func moveAtEdge(_ p: SCNVector3,
+                            velocity: inout SCNVector3) -> SCNVector3 {
+        guard rules.edgeMode == .bounce else { return wrapped(p) }
+        var position = p
+        if position.x < -boundary { position.x = -boundary; velocity.x = abs(velocity.x) }
+        if position.x > boundary { position.x = boundary; velocity.x = -abs(velocity.x) }
+        if position.y < -boundary { position.y = -boundary; velocity.y = abs(velocity.y) }
+        if position.y > boundary { position.y = boundary; velocity.y = -abs(velocity.y) }
+        if position.z < -boundary { position.z = -boundary; velocity.z = abs(velocity.z) }
+        if position.z > boundary { position.z = boundary; velocity.z = -abs(velocity.z) }
+        return position
+    }
+
+    private func spawnBlackHole() {
+        let core = SCNNode(geometry: SCNSphere(radius: 4.5))
+        core.geometry?.firstMaterial?.diffuse.contents = NSColor.black
+        core.geometry?.firstMaterial?.lightingModel = .constant
+        let halo = SCNNode(geometry: SCNTorus(ringRadius: 8, pipeRadius: 1.6))
+        halo.geometry?.firstMaterial?.emission.contents = NSColor.systemOrange
+        halo.geometry?.firstMaterial?.diffuse.contents = NSColor.systemPurple
+        halo.eulerAngles.x = CGFloat.pi / 4
+        core.addChildNode(halo)
+        core.position = SCNVector3(CGFloat.random(in: -58...58),
+                                   CGFloat.random(in: -48...48),
+                                   CGFloat.random(in: -82...(-20)))
+        scene.rootNode.addChildNode(core)
+        blackHole = core
+        blackHoleRemaining = 13
+        if soundEnabled { ArcadeAudio.shared.play(.comet) }
+    }
+
+    private func updateBlackHole(_ dt: CGFloat) {
+        guard rules.blackHoleEnabled else {
+            blackHole?.removeFromParentNode()
+            blackHole = nil
+            return
+        }
+        if blackHole == nil && wave >= 3 && elapsed - lastBlackHole > nextBlackHoleDelay {
+            spawnBlackHole()
+        }
+        guard let hole = blackHole else { return }
+        blackHoleRemaining -= dt
+        if blackHoleRemaining <= 0 {
+            hole.removeFromParentNode()
+            blackHole = nil
+            lastBlackHole = elapsed
+            nextBlackHoleDelay = CGFloat.random(in: 30...46)
+            return
+        }
+        hole.eulerAngles.y += dt * 0.4
+        let center = hole.position
+        func gravity(_ position: SCNVector3) -> SCNVector3 {
+            let delta = subtract(center, position)
+            let distance = max(0.1, length(delta))
+            guard distance < 115 else { return SCNVector3Zero }
+            let strength = min(CGFloat(140), 3400 / max(20, distance))
+            return multiply(normalize(delta), strength * dt)
+        }
+        shipVelocity = add(shipVelocity, gravity(ship.position))
+        if length(subtract(ship.position, center)) < 5.0 && elapsed > invulnerableUntil {
+            lives -= 1
+            if soundEnabled { ArcadeAudio.shared.play(.ship) }
+            ship.position = SCNVector3Zero
+            shipVelocity = SCNVector3Zero
+            invulnerableUntil = elapsed + 2
+            if lives <= 0 {
+                gameOver = true
+                message = "BLACK HOLE — GAME OVER"
+            }
+        }
+        for i in rocks.indices.reversed() {
+            rocks[i].velocity = add(rocks[i].velocity, gravity(rocks[i].node.position))
+            if length(subtract(rocks[i].node.position, center)) < 5.5 {
+                rocks.remove(at: i).node.removeFromParentNode()
+            }
+        }
+        for i in shots.indices.reversed() {
+            shots[i].velocity = add(shots[i].velocity, gravity(shots[i].node.position))
+            if length(subtract(shots[i].node.position, center)) < 5.0 {
+                shots.remove(at: i).node.removeFromParentNode()
+            }
+        }
+        if var missile = nuclearMissile {
+            missile.velocity = add(missile.velocity, gravity(missile.node.position))
+            nuclearMissile = missile
         }
     }
 
