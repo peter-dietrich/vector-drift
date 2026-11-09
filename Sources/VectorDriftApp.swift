@@ -267,9 +267,9 @@ private struct GameWindow: View {
                     : "← → Rotate  ↑ Thrust  Space Fire  S Shield  N Missile  ↓ Warp  P Pause  R Restart")
                 Spacer()
                 if mode == Look.modern.rawValue {
-                    Text("Sky: NASA / ESA / CSA / STScI")
+                    Text("Sky: Original procedural vector nebula")
                         .foregroundStyle(.white.opacity(0.46))
-                        .help("Photo layers are downloaded and cached on first launch. Sources: NASA SVS 31285 and 12086.")
+                        .help("All space clouds and star clusters are generated locally. No photographic images are used.")
                 } else {
                     Text("Click playfield for keyboard focus")
                 }
