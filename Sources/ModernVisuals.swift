@@ -11,11 +11,12 @@ enum ModernVisuals {
         let layer = SKNode()
         layer.zPosition = -20
 
-        for (x, y, radius, color) in [
+        let nebulae: [(CGFloat, CGFloat, CGFloat, SKColor)] = [
             (0.21, 0.73, 195.0, SKColor(calibratedRed: 0.12, green: 0.35, blue: 0.65, alpha: 0.08)),
             (0.77, 0.25, 155.0, SKColor(calibratedRed: 0.45, green: 0.13, blue: 0.66, alpha: 0.09)),
             (0.63, 0.86, 110.0, SKColor(calibratedRed: 0.08, green: 0.52, blue: 0.58, alpha: 0.06))
-        ] {
+        ]
+        for (x, y, radius, color) in nebulae {
             let haze = SKShapeNode(circleOfRadius: radius)
             haze.position = CGPoint(x: size.width * x, y: size.height * y)
             haze.fillColor = color
