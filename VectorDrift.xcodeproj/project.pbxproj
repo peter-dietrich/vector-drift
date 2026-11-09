@@ -7,11 +7,13 @@
   000000000000000000000065 = { isa = PBXBuildFile; fileRef = 000000000000000000000066; };
   000000000000000000000073 = { isa = PBXBuildFile; fileRef = 000000000000000000000074; };
   000000000000000000000075 = { isa = PBXBuildFile; fileRef = 000000000000000000000076; };
+  000000000000000000000077 = { isa = PBXBuildFile; fileRef = 000000000000000000000078; };
   000000000000000000000066 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/VectorDriftApp.swift; sourceTree = "<group>"; };
   000000000000000000000074 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ModernVisuals.swift; sourceTree = "<group>"; };
   000000000000000000000076 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ArcadeEffects.swift; sourceTree = "<group>"; };
+  000000000000000000000078 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/ModernRockTextures.swift; sourceTree = "<group>"; };
   000000000000000000000067 = { isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VectorDrift.app; sourceTree = BUILT_PRODUCTS_DIR; };
-  000000000000000000000068 = { isa = PBXGroup; children = (000000000000000000000066, 000000000000000000000074, 000000000000000000000076, 000000000000000000000069); sourceTree = "<group>"; };
+  000000000000000000000068 = { isa = PBXGroup; children = (000000000000000000000066, 000000000000000000000074, 000000000000000000000076, 000000000000000000000078, 000000000000000000000069); sourceTree = "<group>"; };
   000000000000000000000069 = { isa = PBXGroup; children = (000000000000000000000067); name = Products; sourceTree = "<group>"; };
   00000000000000000000006A = {
    isa = PBXNativeTarget;
@@ -38,7 +40,7 @@
    projectRoot = "";
    targets = (00000000000000000000006A);
   };
-  00000000000000000000006C = { isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (000000000000000000000065, 000000000000000000000073, 000000000000000000000075); runOnlyForDeploymentPostprocessing = 0; };
+  00000000000000000000006C = { isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (000000000000000000000065, 000000000000000000000073, 000000000000000000000075, 000000000000000000000077); runOnlyForDeploymentPostprocessing = 0; };
   00000000000000000000006D = { isa = XCConfigurationList; buildConfigurations = (00000000000000000000006F, 000000000000000000000070); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
   00000000000000000000006E = { isa = XCConfigurationList; buildConfigurations = (000000000000000000000071, 000000000000000000000072); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
   00000000000000000000006F = { isa = XCBuildConfiguration; buildSettings = {
