@@ -757,19 +757,12 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
     }
 
     private func spawnBlackHole() {
-        let core = SCNNode(geometry: SCNSphere(radius: 4.5))
-        core.geometry?.firstMaterial?.diffuse.contents = NSColor.black
-        core.geometry?.firstMaterial?.lightingModel = .constant
-        let halo = SCNNode(geometry: SCNTorus(ringRadius: 8, pipeRadius: 1.6))
-        halo.geometry?.firstMaterial?.emission.contents = NSColor.systemOrange
-        halo.geometry?.firstMaterial?.diffuse.contents = NSColor.systemPurple
-        halo.eulerAngles.x = CGFloat.pi / 4
-        core.addChildNode(halo)
-        core.position = SCNVector3(CGFloat.random(in: -58...58),
+        let hole = BlackHoleArtwork.flight3D()
+        hole.position = SCNVector3(CGFloat.random(in: -58...58),
                                    CGFloat.random(in: -48...48),
                                    CGFloat.random(in: -82...(-20)))
-        scene.rootNode.addChildNode(core)
-        blackHole = core
+        scene.rootNode.addChildNode(hole)
+        blackHole = hole
         blackHoleRemaining = 13
         if soundEnabled { ArcadeAudio.shared.play(.comet) }
     }
