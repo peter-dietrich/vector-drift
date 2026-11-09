@@ -559,7 +559,7 @@ final class DriftScene: SKScene {
         titleVisible = false
         scoreRecorded = false
         shieldActive = false
-        shieldEnergy = difficulty.shieldDuration
+        shieldEnergy = CGFloat(customRules?.shieldDuration ?? Double(difficulty.shieldDuration))
         shieldRechargeRemaining = 0
         missilesRemaining = customRules?.missilesPerWave ?? 2
         lastComet = 0
@@ -620,7 +620,7 @@ final class DriftScene: SKScene {
                 startShieldRecharge()
             } else if shieldRechargeRemaining <= 0 {
                 shieldActive = true
-                shieldEnergy = difficulty.shieldDuration
+                shieldEnergy = CGFloat(customRules?.shieldDuration ?? Double(difficulty.shieldDuration))
                 shieldNode.isHidden = false
                 ArcadeAudio.shared.play(.shield)
             }
@@ -654,7 +654,7 @@ final class DriftScene: SKScene {
         } else if shieldRechargeRemaining > 0 {
             shieldRechargeRemaining = max(0, shieldRechargeRemaining - dt)
             if shieldRechargeRemaining == 0 {
-                shieldEnergy = difficulty.shieldDuration
+                shieldEnergy = CGFloat(customRules?.shieldDuration ?? Double(difficulty.shieldDuration))
             }
         }
         ArcadeEffects.updateShield(shieldNode, modern: modern,
@@ -676,8 +676,9 @@ final class DriftScene: SKScene {
         ship.zRotation = heading
         flame.isHidden = !modern || !thrusting
         flame.yScale = CGFloat.random(in: 0.75...1.25)
-        ship.position = wrapped(CGPoint(x: ship.position.x + velocity.dx * dt,
-                                        y: ship.position.y + velocity.dy * dt), margin: 15)
+        let nextShipPosition = CGPoint(x: ship.position.x + velocity.dx * dt,
+                                       y: ship.position.y + velocity.dy * dt)
+        ship.position = moveAtEdge(nextShipPosition, velocity: &velocity, margin: 15)
         ship.alpha = elapsed < protectedUntil && Int(elapsed * 10).isMultiple(of: 2) ? 0.25 : 1
 
         if held.contains(49) &&
@@ -697,10 +698,10 @@ final class DriftScene: SKScene {
         }
 
         for i in boulders.indices {
-            boulders[i].node.position = wrapped(CGPoint(
-                x: boulders[i].node.position.x + boulders[i].velocity.dx * dt,
-                y: boulders[i].node.position.y + boulders[i].velocity.dy * dt),
-                margin: boulders[i].radius)
+            let next = CGPoint(x: boulders[i].node.position.x + boulders[i].velocity.dx * dt,
+                               y: boulders[i].node.position.y + boulders[i].velocity.dy * dt)
+            boulders[i].node.position = moveAtEdge(
+                next, velocity: &boulders[i].velocity, margin: boulders[i].radius)
             boulders[i].node.zRotation += boulders[i].spin * dt
         }
         // Only previously damaged multi-hit asteroids can self-fracture.
@@ -723,17 +724,17 @@ final class DriftScene: SKScene {
 
         for i in lasers.indices {
             lasers[i].remaining -= dt
-            lasers[i].node.position = wrapped(CGPoint(
-                x: lasers[i].node.position.x + lasers[i].velocity.dx * dt,
-                y: lasers[i].node.position.y + lasers[i].velocity.dy * dt), margin: 0)
+            let next = CGPoint(x: lasers[i].node.position.x + lasers[i].velocity.dx * dt,
+                               y: lasers[i].node.position.y + lasers[i].velocity.dy * dt)
+            lasers[i].node.position = moveAtEdge(next, velocity: &lasers[i].velocity, margin: 0)
         }
 
-        if modern || difficulty == .hard {
+        if (customRules?.cometEnabled ?? (modern || difficulty == .hard)) {
             updateComet(dt)
         }
         updateNuclearMissile(dt)
         updateShockwaves(dt)
-        updateSaucer(dt)
+        if customRules?.saucerEnabled ?? true { updateSaucer(dt) }
         updateEnemyShots(dt)
         for i in lasers.indices.reversed() {
             if lasers[i].remaining <= 0 {
@@ -924,7 +925,7 @@ final class DriftScene: SKScene {
         shieldActive = false
         shieldNode.isHidden = true
         shieldEnergy = 0
-        shieldRechargeRemaining = difficulty.shieldCooldown
+        shieldRechargeRemaining = CGFloat(customRules?.shieldCooldown ?? Double(difficulty.shieldCooldown))
     }
 
     private func hyperspace() {
@@ -937,8 +938,10 @@ final class DriftScene: SKScene {
     }
 
     private func spawnWave() {
-        for index in 0..<difficulty.rockCount(forWave: wave) {
-            let level = difficulty.startingRockLevel(at: index)
+        let count = customRules?.rockCount(wave: wave) ?? difficulty.rockCount(forWave: wave)
+        for index in 0..<count {
+            let level = customRules?.initialRockLevel(at: index) ??
+                difficulty.startingRockLevel(at: index)
             let radius = rockRadius(for: level)
             // The larger tiers require extra separation from the player.
             let margin = max(40, radius + 8)
@@ -971,7 +974,8 @@ final class DriftScene: SKScene {
         default: baseRange = 138...190
         }
         let waveFactor = 1 + min(CGFloat(wave - 1) * 0.045, 0.45)
-        return CGFloat.random(in: baseRange) * difficulty.speedMultiplier * waveFactor
+        let multiplier = CGFloat(customRules?.asteroidSpeed ?? Double(difficulty.speedMultiplier))
+        return CGFloat.random(in: baseRange) * multiplier * waveFactor
     }
 
     /// A player shot and the delayed fracture use exactly the same
@@ -1074,7 +1078,8 @@ final class DriftScene: SKScene {
         fractureRing.isHidden = true
         node.addChild(fractureRing)
         addChild(node)
-        let hitPoints = difficulty.hitsToSplit(level: level)
+        let hitPoints = customRules?.hits(level: level, difficulty: difficulty.rawValue) ??
+            difficulty.hitsToSplit(level: level)
         let spinSpeed = CGFloat.random(in: -1.2...1.2) /
             (1 + CGFloat(max(level - 3, 0)) * 0.5)
         boulders.append(Boulder(node: node, velocity: velocity, radius: radius,
@@ -1534,6 +1539,19 @@ final class DriftScene: SKScene {
         scores.append(score)
         scores.sort(by: >)
         UserDefaults.standard.set(Array(scores.prefix(5)), forKey: key)
+    }
+
+    private func moveAtEdge(_ proposed: CGPoint, velocity v: inout CGVector,
+                            margin: CGFloat) -> CGPoint {
+        guard customRules?.edgeMode == .bounce else { return wrapped(proposed, margin: margin) }
+        let limitX = max(margin + 1, size.width - margin)
+        let limitY = max(margin + 1, size.height - margin)
+        var p = proposed
+        if p.x < margin { p.x = margin; v.dx = abs(v.dx) }
+        if p.x > limitX { p.x = limitX; v.dx = -abs(v.dx) }
+        if p.y < margin { p.y = margin; v.dy = abs(v.dy) }
+        if p.y > limitY { p.y = limitY; v.dy = -abs(v.dy) }
+        return p
     }
 
     private func wrapped(_ p: CGPoint, margin: CGFloat) -> CGPoint {
