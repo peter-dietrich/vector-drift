@@ -102,6 +102,7 @@ final class ModernCinematicSky: SKNode {
     private let fallback: ModernSpaceBackdrop
     private var photos: [Layer] = []
     private var loaded = Set<TelescopeSkyLibrary.Plate>()
+    private var fadeIn: [CGFloat] = [0, 0, 0]
     private var lastTime: CGFloat?
     private var travel = CGVector.zero
     private var warpRemaining: CGFloat = 0
@@ -202,13 +203,13 @@ final class ModernCinematicSky: SKNode {
             photos[0].node.size = coverSize(for: texture, overfill: 1.31)
             photos[2].node.size = coverSize(for: texture, overfill: 1.57)
             photos[2].node.zRotation = -0.24
-            photos[0].node.run(.fadeAlpha(to: 0.82, duration: 2))
-            photos[2].node.run(.fadeAlpha(to: 0.17, duration: 3.5))
+            fadeIn[0] = 0
+            fadeIn[2] = 0
         } else {
             photos[1].node.texture = texture
             photos[1].node.size = coverSize(for: texture, overfill: 1.46)
             photos[1].node.zRotation = 0.11
-            photos[1].node.run(.fadeAlpha(to: 0.34, duration: 3.5))
+            fadeIn[1] = 0
         }
         // Keep a touch of distant procedural starlight if Orion loads first;
         // the full procedural sky fades once the Webb image is present.
@@ -244,6 +245,7 @@ final class ModernCinematicSky: SKNode {
         for i in photos.indices {
             guard photos[i].node.texture != nil else { continue }
             let layer = photos[i]
+            fadeIn[i] = min(1, fadeIn[i] + dt / (i == 0 ? 2.3 : 3.5))
             let phase = CGFloat(i) * 1.64
             let perspective: CGFloat = [0.28, 0.80, 1.25][i]
             let slowX = sin(time * (0.045 + CGFloat(i) * 0.012) + phase) * 12
@@ -252,7 +254,7 @@ final class ModernCinematicSky: SKNode {
                 x: sceneSize.width / 2 + slowX + travel.dx * perspective,
                 y: sceneSize.height / 2 + slowY + travel.dy * perspective
             )
-            layer.node.alpha = layer.baseAlpha *
+            layer.node.alpha = fadeIn[i] * layer.baseAlpha *
                 (0.92 + 0.08 * sin(time * 0.14 + phase)) *
                 (i == 1 ? 0.80 + density * 0.23 : 1.0)
             layer.time.floatValue = Float(time)
