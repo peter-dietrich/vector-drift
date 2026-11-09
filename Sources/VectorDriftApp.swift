@@ -544,17 +544,17 @@ final class DriftScene: SKScene {
     private let hud = SKLabelNode(fontNamed: "Menlo-Bold")
     private let statusHUD = SKLabelNode(fontNamed: "Menlo-Bold")
     private let message = SKLabelNode(fontNamed: "Menlo-Bold")
-    private let leftPanel = SKShapeNode(rectOf: CGSize(width: 344, height: 98), cornerRadius: 8)
-    private let rightPanel = SKShapeNode(rectOf: CGSize(width: 354, height: 98), cornerRadius: 8)
-    private let leftAccent = SKShapeNode(rectOf: CGSize(width: 3, height: 79))
-    private let rightAccent = SKShapeNode(rectOf: CGSize(width: 3, height: 79))
+    private let leftPanel = SKShapeNode(rectOf: CGSize(width: 304, height: 76), cornerRadius: 7)
+    private let rightPanel = SKShapeNode(rectOf: CGSize(width: 304, height: 76), cornerRadius: 7)
+    private let leftAccent = SKShapeNode(rectOf: CGSize(width: 2, height: 56))
+    private let rightAccent = SKShapeNode(rectOf: CGSize(width: 2, height: 56))
     private let leftHeading = SKLabelNode(fontNamed: "Menlo-Bold")
     private let rightHeading = SKLabelNode(fontNamed: "Menlo-Bold")
     private let leftFootnote = SKLabelNode(fontNamed: "Menlo")
     private let rightFootnote = SKLabelNode(fontNamed: "Menlo")
     private let stageHeading = SKLabelNode(fontNamed: "Menlo-Bold")
     private let stageCaption = SKLabelNode(fontNamed: "Menlo")
-    private let stagePanel = SKShapeNode(rectOf: CGSize(width: 476, height: 134), cornerRadius: 9)
+    private let stagePanel = SKShapeNode(rectOf: CGSize(width: 398, height: 108), cornerRadius: 8)
 
     override func didMove(to view: SKView) {
         guard !ready else { return }
@@ -569,15 +569,15 @@ final class DriftScene: SKScene {
         ship.addChild(shieldNode)
         for panel in [leftPanel, rightPanel] {
             panel.zPosition = 85
-            panel.fillColor = SKColor(calibratedWhite: 0.015, alpha: 0.70)
-            panel.strokeColor = SKColor(calibratedRed: 0.73, green: 0.63, blue: 0.48, alpha: 0.36)
-            panel.lineWidth = 0.8
+            panel.fillColor = SKColor(calibratedRed: 0.035, green: 0.085, blue: 0.13, alpha: 0.12)
+            panel.strokeColor = SKColor(calibratedRed: 0.60, green: 0.71, blue: 0.81, alpha: 0.20)
+            panel.lineWidth = 0.55
             addChild(panel)
         }
         for accent in [leftAccent, rightAccent] {
             accent.zPosition = 87
             accent.strokeColor = .clear
-            accent.fillColor = SKColor(calibratedRed: 1.0, green: 0.64, blue: 0.28, alpha: 0.90)
+            accent.fillColor = SKColor(calibratedRed: 1.0, green: 0.64, blue: 0.28, alpha: 0.54)
             addChild(accent)
         }
         for label in [leftHeading, rightHeading, leftFootnote, rightFootnote, stageHeading, stageCaption] {
@@ -585,36 +585,36 @@ final class DriftScene: SKScene {
             addChild(label)
         }
         for label in [leftHeading, rightHeading, stageHeading] {
-            label.fontSize = 11
-            label.fontColor = SKColor(calibratedRed: 1.0, green: 0.72, blue: 0.40, alpha: 1)
+            label.fontSize = 8.5
+            label.fontColor = SKColor(calibratedRed: 1.0, green: 0.72, blue: 0.40, alpha: 0.91)
         }
-        leftHeading.text = "VECTOR DRIFT   //   TELEMETRY"
-        rightHeading.text = "SYSTEMS   //   COMBAT STATUS"
-        stageHeading.text = "VECTOR DRIFT    /    FLIGHT SIM"
-        leftFootnote.fontSize = 10
-        rightFootnote.fontSize = 10
-        stageCaption.fontSize = 12
+        leftHeading.text = "FLIGHT   //   TELEMETRY"
+        rightHeading.text = "SYSTEMS   //   COMBAT"
+        stageHeading.text = "VECTOR DRIFT   //   FLIGHT SIM"
+        leftFootnote.fontSize = 9
+        rightFootnote.fontSize = 9
+        stageCaption.fontSize = 10
         leftFootnote.fontColor = SKColor(calibratedWhite: 0.78, alpha: 0.95)
         rightFootnote.fontColor = SKColor(calibratedWhite: 0.78, alpha: 0.95)
         stageCaption.fontColor = SKColor(calibratedWhite: 0.85, alpha: 1)
-        hud.fontSize = 14
+        hud.fontSize = 19
         hud.horizontalAlignmentMode = .left
         hud.verticalAlignmentMode = .top
         hud.zPosition = 90
         addChild(hud)
-        statusHUD.fontSize = 13
+        statusHUD.fontSize = 18
         statusHUD.horizontalAlignmentMode = .right
         statusHUD.verticalAlignmentMode = .top
         statusHUD.zPosition = 90
         addChild(statusHUD)
         stagePanel.zPosition = 80
-        stagePanel.fillColor = SKColor(calibratedRed: 0.02, green: 0.045, blue: 0.085, alpha: 0.93)
-        stagePanel.strokeColor = ModernVisuals.ice.withAlphaComponent(0.52)
-        stagePanel.lineWidth = 1.4
+        stagePanel.fillColor = SKColor(calibratedRed: 0.035, green: 0.085, blue: 0.13, alpha: 0.22)
+        stagePanel.strokeColor = ModernVisuals.ice.withAlphaComponent(0.23)
+        stagePanel.lineWidth = 0.7
         stagePanel.isHidden = true
         addChild(stagePanel)
         message.zPosition = 91
-        message.fontSize = 26
+        message.fontSize = 35
         message.horizontalAlignmentMode = .center
         addChild(message)
         leftHeading.horizontalAlignmentMode = .left
@@ -628,32 +628,30 @@ final class DriftScene: SKScene {
 
     override func didChangeSize(_ oldSize: CGSize) {
         backgroundLayer?.resize(to: size)
-        let inset: CGFloat = 16
-        let available = max(500, size.width)
-        let panelWidth: CGFloat = min(344, (available - 58) / 2)
-        // Move each panel toward its own corner. Compact text and slim borders
-        // preserve a large central corridor for shooting and flying.
+        let inset: CGFloat = 15
+        let panelWidth: CGFloat = min(304, max(215, (size.width - 52) / 2))
+        let panelHeight: CGFloat = 76
+        let panelY = size.height - 54
         let leftX = inset + panelWidth / 2
         let rightX = size.width - inset - panelWidth / 2
-        leftPanel.position = CGPoint(x: leftX, y: size.height - 66)
-        rightPanel.position = CGPoint(x: rightX, y: size.height - 66)
-        leftPanel.path = CGPath(roundedRect: CGRect(x: -panelWidth/2, y: -49,
-                                                   width: panelWidth, height: 98),
-                                cornerWidth: 8, cornerHeight: 8, transform: nil)
-        rightPanel.path = CGPath(roundedRect: CGRect(x: -panelWidth/2, y: -49,
-                                                    width: panelWidth, height: 98),
-                                 cornerWidth: 8, cornerHeight: 8, transform: nil)
-        leftAccent.position = CGPoint(x: inset + 5, y: size.height - 66)
-        rightAccent.position = CGPoint(x: size.width - inset - 5, y: size.height - 66)
-        leftHeading.position = CGPoint(x: inset + 17, y: size.height - 40)
-        hud.position = CGPoint(x: inset + 17, y: size.height - 61)
-        leftFootnote.position = CGPoint(x: inset + 17, y: size.height - 97)
-        rightHeading.position = CGPoint(x: size.width - inset - 17, y: size.height - 40)
-        statusHUD.position = CGPoint(x: size.width - inset - 17, y: size.height - 61)
-        rightFootnote.position = CGPoint(x: size.width - inset - 17, y: size.height - 97)
+        for (panel, x) in [(leftPanel, leftX), (rightPanel, rightX)] {
+            panel.position = CGPoint(x: x, y: panelY)
+            panel.path = CGPath(roundedRect: CGRect(
+                x: -panelWidth/2, y: -panelHeight/2,
+                width: panelWidth, height: panelHeight),
+                cornerWidth: 7, cornerHeight: 7, transform: nil)
+        }
+        leftAccent.position = CGPoint(x: inset + 4, y: panelY)
+        rightAccent.position = CGPoint(x: size.width - inset - 4, y: panelY)
+        leftHeading.position = CGPoint(x: inset + 14, y: size.height - 31)
+        hud.position = CGPoint(x: inset + 14, y: size.height - 45)
+        leftFootnote.position = CGPoint(x: inset + 14, y: size.height - 79)
+        rightHeading.position = CGPoint(x: size.width - inset - 14, y: size.height - 31)
+        statusHUD.position = CGPoint(x: size.width - inset - 14, y: size.height - 45)
+        rightFootnote.position = CGPoint(x: size.width - inset - 14, y: size.height - 79)
         message.position = CGPoint(x: size.width / 2, y: size.height / 2 + 1)
-        stageHeading.position = CGPoint(x: size.width / 2, y: size.height / 2 + 42)
-        stageCaption.position = CGPoint(x: size.width / 2, y: size.height / 2 - 39)
+        stageHeading.position = CGPoint(x: size.width / 2, y: size.height / 2 + 31)
+        stageCaption.position = CGPoint(x: size.width / 2, y: size.height / 2 - 31)
         stagePanel.position = CGPoint(x: size.width / 2, y: size.height / 2)
     }
 
@@ -1286,11 +1284,11 @@ final class DriftScene: SKScene {
     }
 
     private func updateHud() {
-        hud.text = String(format: "SCORE %06d   BEST %06d", score, high)
+        hud.text = String(format: "%06d", score)
         let density = modern ? Int((beltDensity(at: elapsed) * 100).rounded()) : 0
         leftFootnote.text = modern
-            ? String(format: "SECTOR %02d   WAVE %02d   BELT %02d%%", max(1, wave / 3 + 1), wave, density)
-            : String(format: "SECTOR %02d   WAVE %02d   CLASSIC", max(1, wave / 3 + 1), wave)
+            ? String(format: "BEST %06d   WAVE %02d   BELT %02d%%", high, wave, density)
+            : String(format: "BEST %06d   WAVE %02d   CLASSIC", high, wave)
         let shieldStatus: String
         if shieldActive {
             shieldStatus = String(format: "SHIELD %.1fs", shieldEnergy)
@@ -1299,8 +1297,9 @@ final class DriftScene: SKScene {
         } else {
             shieldStatus = "SHIELD READY [S]"
         }
-        statusHUD.text = "LIVES \(lives)   NUKES \(missilesRemaining)   \(difficulty.title.uppercased())"
-        rightFootnote.text = shieldStatus + (nuclearMissile == nil ? "" : "   ·   MISSILE AWAY")
+        statusHUD.text = String(format: "LIVES %02d   NUKES %02d", lives, missilesRemaining)
+        rightFootnote.text = difficulty.title.uppercased() + "   " + shieldStatus +
+            (nuclearMissile == nil ? "" : "   ·   MISSILE AWAY")
     }
 
     private func updateStyle() {
@@ -1315,14 +1314,18 @@ final class DriftScene: SKScene {
         statusHUD.fontColor = modern ? ModernVisuals.ice : .white
         message.fontColor = color
         stagePanel.fillColor = modern
-            ? SKColor(calibratedRed: 0.018, green: 0.035, blue: 0.085, alpha: 0.95)
-            : SKColor(calibratedWhite: 0.07, alpha: 0.95)
+            ? SKColor(calibratedRed: 0.035, green: 0.085, blue: 0.13, alpha: 0.22)
+            : SKColor(calibratedWhite: 0.06, alpha: 0.20)
         stagePanel.strokeColor = modern
-            ? SKColor(calibratedRed: 1, green: 0.67, blue: 0.34, alpha: 0.55) : .white
+            ? SKColor(calibratedRed: 0.94, green: 0.72, blue: 0.44, alpha: 0.25)
+            : SKColor(calibratedWhite: 0.92, alpha: 0.24)
         for panel in [leftPanel, rightPanel] {
+            panel.fillColor = modern
+                ? SKColor(calibratedRed: 0.035, green: 0.085, blue: 0.13, alpha: 0.12)
+                : SKColor(calibratedWhite: 0.08, alpha: 0.14)
             panel.strokeColor = modern
-                ? SKColor(calibratedRed: 0.84, green: 0.68, blue: 0.44, alpha: 0.40)
-                : SKColor(calibratedWhite: 0.8, alpha: 0.35)
+                ? SKColor(calibratedRed: 0.84, green: 0.68, blue: 0.44, alpha: 0.20)
+                : SKColor(calibratedWhite: 0.8, alpha: 0.18)
         }
         for rock in boulders {
             styleRock(rock.node, detail: rock.detail)
