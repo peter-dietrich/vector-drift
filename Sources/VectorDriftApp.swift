@@ -1554,6 +1554,197 @@ final class DriftScene: SKScene {
         return p
     }
 
+    private func snapshotPoint(_ p: CGPoint) -> SavedVector {
+        SavedVector(x: Double(p.x), y: Double(p.y))
+    }
+
+    private func snapshotVelocity(_ v: CGVector) -> SavedVector {
+        SavedVector(x: Double(v.dx), y: Double(v.dy))
+    }
+
+    private func point(_ v: SavedVector) -> CGPoint {
+        CGPoint(x: v.x, y: v.y)
+    }
+
+    private func vector(_ v: SavedVector) -> CGVector {
+        CGVector(dx: v.x, dy: v.y)
+    }
+
+    /// Returns a complete gameplay checkpoint rather than a score-only save.
+    func makeSnapshot(activePresetID: String) -> GameSnapshot? {
+        guard ready && !titleVisible && !over else { return nil }
+        let rocks = boulders.map { rock in
+            SavedRock(level: rock.level, position: snapshotPoint(rock.node.position),
+                      velocity: snapshotVelocity(rock.velocity),
+                      rotation: Double(rock.node.zRotation), spin: Double(rock.spin),
+                      hitPoints: rock.hitPoints,
+                      remainingFracture: rock.fractureRemaining.map(Double.init),
+                      fractureDuration: Double(rock.fractureDuration),
+                      vertices: [])
+        }
+        let shots = lasers.map {
+            SavedProjectile(position: snapshotPoint($0.node.position),
+                            velocity: snapshotVelocity($0.velocity),
+                            remaining: Double($0.remaining))
+        }
+        let enemyBullets = enemyShots.map {
+            SavedProjectile(position: snapshotPoint($0.node.position),
+                            velocity: snapshotVelocity($0.velocity),
+                            remaining: Double($0.remaining))
+        }
+        let cometState = comet.map {
+            SavedMovingEnemy(position: snapshotPoint($0.node.position),
+                             velocity: snapshotVelocity($0.velocity),
+                             remaining: Double($0.remaining))
+        }
+        let saucerState = saucer.map {
+            SavedMovingEnemy(position: snapshotPoint($0.node.position),
+                             velocity: snapshotVelocity($0.velocity),
+                             remaining: Double($0.remaining))
+        }
+        let missileState = nuclearMissile.map {
+            SavedProjectile(position: snapshotPoint($0.node.position),
+                            velocity: snapshotVelocity($0.velocity),
+                            remaining: Double($0.fuse))
+        }
+        return GameSnapshot(
+            version: 1, difficulty: difficulty.rawValue, modern: modern,
+            activePresetID: activePresetID, customRules: customRules,
+            score: score, lives: lives, wave: wave, elapsed: Double(elapsed),
+            heading: Double(heading), shipPosition: snapshotPoint(ship.position),
+            shipVelocity: snapshotVelocity(velocity),
+            protectionRemaining: Double(max(0, protectedUntil - elapsed)),
+            shieldActive: shieldActive, shieldRemaining: Double(shieldEnergy),
+            shieldCooldownRemaining: Double(shieldRechargeRemaining),
+            timeSinceShot: Double(elapsed - lastFire),
+            timeSinceWarp: Double(elapsed - lastWarp),
+            timeSinceComet: Double(elapsed - lastComet),
+            nextCometDelay: Double(nextCometDelay),
+            timeSinceSaucer: Double(elapsed - lastSaucer),
+            nextSaucerDelay: Double(nextSaucerDelay),
+            timeSinceSaucerShot: Double(elapsed - lastSaucerShot),
+            rocks: rocks, bullets: shots, enemyBullets: enemyBullets,
+            comet: cometState, saucer: saucerState,
+            shockwaves: shockwaves.map {
+                SavedShockwave(center: snapshotPoint($0.center),
+                               elapsed: Double($0.elapsed))
+            },
+            blackHole: nil, timeSinceBlackHole: 0, nextBlackHoleDelay: 0,
+            missilesRemaining: missilesRemaining, missile: missileState
+        )
+    }
+
+    /// Restore positions, velocities, remaining lifetimes, damaged-rock
+    /// timers, shield cooldown and active projectiles. Cosmetic rock surfaces
+    /// are regenerated and may differ from their original appearance.
+    func restore(_ snapshot: GameSnapshot) {
+        guard snapshot.version == 1 else { return }
+        customRules = snapshot.customRules?.validated()
+        difficulty = Difficulty(rawValue: snapshot.difficulty) ?? .medium
+        modern = snapshot.modern
+        restart()
+        boulders.forEach { $0.node.removeFromParent() }
+        lasers.forEach { $0.node.removeFromParent() }
+        clearSpecialEffects()
+        clearEnemies()
+        boulders.removeAll()
+        lasers.removeAll()
+        elapsed = CGFloat(snapshot.elapsed)
+        lastTime = 0
+        score = snapshot.score
+        high = max(high, score)
+        lives = snapshot.lives
+        wave = snapshot.wave
+        heading = CGFloat(snapshot.heading)
+        ship.position = point(snapshot.shipPosition)
+        ship.zRotation = heading
+        velocity = vector(snapshot.shipVelocity)
+        protectedUntil = elapsed + CGFloat(snapshot.protectionRemaining)
+        shieldActive = snapshot.shieldActive
+        shieldEnergy = CGFloat(snapshot.shieldRemaining)
+        shieldRechargeRemaining = CGFloat(snapshot.shieldCooldownRemaining)
+        shieldNode.isHidden = !shieldActive
+        lastFire = elapsed - CGFloat(snapshot.timeSinceShot)
+        lastWarp = elapsed - CGFloat(snapshot.timeSinceWarp)
+        lastComet = elapsed - CGFloat(snapshot.timeSinceComet)
+        nextCometDelay = CGFloat(snapshot.nextCometDelay)
+        lastSaucer = elapsed - CGFloat(snapshot.timeSinceSaucer)
+        nextSaucerDelay = CGFloat(snapshot.nextSaucerDelay)
+        lastSaucerShot = elapsed - CGFloat(snapshot.timeSinceSaucerShot)
+        missilesRemaining = snapshot.missilesRemaining
+        titleVisible = false
+        over = false
+        stopped = false
+        stagePanel.isHidden = true
+        message.text = ""
+        ship.isHidden = false
+
+        for saved in snapshot.rocks {
+            spawnRock(level: saved.level, at: point(saved.position),
+                      velocity: vector(saved.velocity))
+            let i = boulders.count - 1
+            boulders[i].node.zRotation = CGFloat(saved.rotation)
+            boulders[i].spin = CGFloat(saved.spin)
+            boulders[i].hitPoints = saved.hitPoints
+            boulders[i].fractureRemaining = saved.remainingFracture.map(CGFloat.init)
+            boulders[i].fractureDuration = CGFloat(saved.fractureDuration)
+            let stage = boulders[i].maximumHitPoints - saved.hitPoints
+            boulders[i].crack.isHidden = stage < 1
+            boulders[i].secondCrack.isHidden = stage < 2
+            updateFractureIndicator(at: i)
+        }
+        for saved in snapshot.bullets {
+            let bullet = SKShapeNode(circleOfRadius: 2)
+            bullet.position = point(saved.position)
+            bullet.fillColor = modern ? .yellow : .white
+            addChild(bullet)
+            lasers.append(Laser(node: bullet, velocity: vector(saved.velocity),
+                                remaining: CGFloat(saved.remaining)))
+        }
+        for saved in snapshot.enemyBullets {
+            let bullet = SKShapeNode(circleOfRadius: 3)
+            bullet.position = point(saved.position)
+            bullet.fillColor = modern ? .systemPink : .white
+            addChild(bullet)
+            enemyShots.append(EnemyShot(node: bullet, velocity: vector(saved.velocity),
+                                        remaining: CGFloat(saved.remaining)))
+        }
+        if let saved = snapshot.comet {
+            let node = modern ? ModernVisuals.cometNode() : ArcadeEffects.classicComet()
+            node.position = point(saved.position)
+            let movement = vector(saved.velocity)
+            node.zRotation = atan2(movement.dy, movement.dx)
+            addChild(node)
+            comet = Comet(node: node, velocity: movement, remaining: CGFloat(saved.remaining))
+        }
+        if let saved = snapshot.saucer {
+            let node = ArcadeEffects.saucer(modern: modern)
+            node.position = point(saved.position)
+            addChild(node)
+            saucer = Saucer(node: node, velocity: vector(saved.velocity),
+                            remaining: CGFloat(saved.remaining))
+        }
+        for saved in snapshot.shockwaves {
+            let ring = ModernVisuals.shockRing(at: point(saved.center))
+            addChild(ring)
+            shockwaves.append(Shockwave(center: point(saved.center),
+                                        elapsed: CGFloat(saved.elapsed),
+                                        ring: ring, hit: [], maxRadius: 350))
+        }
+        if let saved = snapshot.missile {
+            let missile = SKShapeNode(ellipseOf: CGSize(width: 11, height: 19))
+            missile.fillColor = modern ? ModernVisuals.fire : .black
+            missile.strokeColor = modern ? .yellow : .white
+            missile.position = point(saved.position)
+            addChild(missile)
+            nuclearMissile = NuclearMissile(
+                node: missile, velocity: vector(saved.velocity),
+                fuse: CGFloat(saved.remaining))
+        }
+        updateStyle()
+        updateHud()
+    }
+
     private func wrapped(_ p: CGPoint, margin: CGFloat) -> CGPoint {
         var result = p
         if result.x < -margin { result.x = size.width + margin }
