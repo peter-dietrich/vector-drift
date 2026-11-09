@@ -72,6 +72,30 @@ fileprivate enum Difficulty: String, CaseIterable, Identifiable {
         }
     }
 
+    var shieldDuration: CGFloat {
+        switch self {
+        case .easy: return 7
+        case .medium: return 5
+        case .hard: return 3
+        }
+    }
+
+    var cometDelay: ClosedRange<CGFloat> {
+        switch self {
+        case .easy: return 15...23
+        case .medium: return 11...18
+        case .hard: return 5...9
+        }
+    }
+
+    var saucerDelay: ClosedRange<CGFloat> {
+        switch self {
+        case .easy: return 27...35
+        case .medium: return 19...27
+        case .hard: return 12...19
+        }
+    }
+
     var initialAsteroids: Int {
         switch self {
         case .easy: return 3
@@ -84,6 +108,8 @@ fileprivate enum Difficulty: String, CaseIterable, Identifiable {
 private struct GameWindow: View {
     @AppStorage("visualMode") private var mode = Look.classic.rawValue
     @AppStorage("difficulty") private var difficulty = Difficulty.medium.rawValue
+    @AppStorage("soundEnabled") private var soundEnabled = true
+    @State private var showScores = false
     @State private var game: DriftScene = {
         let scene = DriftScene(size: CGSize(width: 1080, height: 670))
         scene.scaleMode = .resizeFill
@@ -111,6 +137,9 @@ private struct GameWindow: View {
                 .frame(width: 260)
                 .environment(\.colorScheme, .dark)
                 .tint(.cyan)
+                Toggle("Sound", isOn: $soundEnabled)
+                    .toggleStyle(.checkbox)
+                Button("Scores") { showScores = true }
                 Button("New Game") { game.restart() }
                     .keyboardShortcut("r", modifiers: [.command])
             }
@@ -120,7 +149,7 @@ private struct GameWindow: View {
             GameView(scene: game)
                 .background(.black)
             HStack {
-                Text("← → Rotate    ↑ Thrust    Space Fire    ↓ Hyperspace    P Pause    R Restart")
+                Text("← → Rotate    ↑ Thrust    Space Fire    S Shield    ↓ Warp    P Pause    R Restart")
                 Spacer()
                 Text("Click playfield for keyboard focus")
             }
@@ -132,7 +161,29 @@ private struct GameWindow: View {
         .onAppear {
             game.modern = mode == Look.modern.rawValue
             game.difficulty = Difficulty(rawValue: difficulty) ?? .medium
-            game.restart()
+            ArcadeAudio.shared.enabled = soundEnabled
+        }
+        .onChange(of: soundEnabled) { ArcadeAudio.shared.enabled = $0 }
+        .sheet(isPresented: $showScores) {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("LOCAL HIGH SCORES").font(.title2.monospaced().bold())
+                ForEach(Difficulty.allCases) { level in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(level.title.uppercased()).font(.headline.monospaced())
+                        let scores = UserDefaults.standard.array(forKey: "vectorDriftScores.\(level.rawValue)") as? [Int] ?? []
+                        if scores.isEmpty {
+                            Text("No completed runs yet").foregroundStyle(.secondary)
+                        } else {
+                            ForEach(Array(scores.prefix(5).enumerated()), id: \.offset) { rank, value in
+                                Text("\(rank + 1).  \(value)").font(.system(.body, design: .monospaced))
+                            }
+                        }
+                    }
+                }
+                Button("Close") { showScores = false }
+            }
+            .padding(26)
+            .frame(minWidth: 360)
         }
         .onChange(of: mode) { value in game.modern = value == Look.modern.rawValue }
         .onChange(of: difficulty) { value in
@@ -183,6 +234,8 @@ private struct Boulder {
     var level: Int
     var spin: CGFloat
     var detail: SKNode
+    var hitPoints: Int
+    var crack: SKShapeNode
 }
 private struct Laser {
     var node: SKShapeNode
@@ -192,6 +245,18 @@ private struct Laser {
 
 private struct Comet {
     var node: SKNode
+    var velocity: CGVector
+    var remaining: CGFloat
+}
+
+private struct Saucer {
+    var node: SKShapeNode
+    var velocity: CGVector
+    var remaining: CGFloat
+}
+
+private struct EnemyShot {
+    var node: SKShapeNode
     var velocity: CGVector
     var remaining: CGFloat
 }
@@ -213,6 +278,16 @@ final class DriftScene: SKScene {
     private var lastComet: CGFloat = 0
     private var nextCometDelay: CGFloat = 13
     private var nextSpark: CGFloat = 0
+    private var saucer: Saucer?
+    private var enemyShots: [EnemyShot] = []
+    private var lastSaucer: CGFloat = 0
+    private var nextSaucerDelay: CGFloat = 20
+    private var lastSaucerShot: CGFloat = 0
+    private var titleVisible = true
+    private var scoreRecorded = false
+    private var shieldActive = false
+    private var shieldEnergy: CGFloat = 0
+    private let shieldNode = ArcadeEffects.shield()
     private var backgroundLayer: SKNode?
     private let modernShipDetail = ModernVisuals.shipDetail()
     private let flame = ModernVisuals.engineFlame()
@@ -253,6 +328,7 @@ final class DriftScene: SKScene {
         addChild(ship)
         ship.addChild(modernShipDetail)
         ship.addChild(flame)
+        ship.addChild(shieldNode)
         hud.fontSize = 15
         hud.horizontalAlignmentMode = .left
         hud.verticalAlignmentMode = .top
@@ -260,7 +336,7 @@ final class DriftScene: SKScene {
         message.fontSize = 28
         message.horizontalAlignmentMode = .center
         addChild(message)
-        restart()
+        showTitle()
     }
 
     override func didChangeSize(_ oldSize: CGSize) {
@@ -273,14 +349,22 @@ final class DriftScene: SKScene {
         boulders.forEach { $0.node.removeFromParent() }
         lasers.forEach { $0.node.removeFromParent() }
         clearSpecialEffects()
+        clearEnemies()
         boulders.removeAll()
         lasers.removeAll()
         held.removeAll()
         score = 0; lives = difficulty.startingLives; wave = 1
         elapsed = 0; lastTime = 0; lastFire = -2; lastWarp = -10
         stopped = false; over = false
+        titleVisible = false
+        scoreRecorded = false
+        shieldActive = false
+        shieldEnergy = difficulty.shieldDuration
         lastComet = 0
-        nextCometDelay = CGFloat.random(in: 12...18)
+        nextCometDelay = CGFloat.random(in: difficulty.cometDelay)
+        lastSaucer = 0
+        nextSaucerDelay = CGFloat.random(in: difficulty.saucerDelay)
+        lastSaucerShot = 0
         nextSpark = 0
         resetShip()
         protectedUntil = difficulty.respawnProtection
@@ -288,7 +372,9 @@ final class DriftScene: SKScene {
         ship.alpha = 1
         ship.setScale(1)
         ship.isHidden = false
+        shieldNode.isHidden = true
         message.text = ""
+        ArcadeAudio.shared.play(.wave)
         spawnWave()
         updateHud()
         updateStyle()
@@ -303,10 +389,28 @@ final class DriftScene: SKScene {
 
     func clearKeys() { held.removeAll() }
 
+    private func showTitle() {
+        titleVisible = true
+        over = false
+        message.text = "VECTOR DRIFT · PRESS RETURN"
+        message.position = CGPoint(x: size.width / 2, y: size.height / 2)
+        updateHud()
+        updateStyle()
+    }
+
     func key(_ code: UInt16, down: Bool, isRepeat: Bool) {
         if down { held.insert(code) } else { held.remove(code) }
         guard down && !isRepeat else { return }
+        if titleVisible || over {
+            if code == 36 || code == 49 || code == 15 { restart() }
+            return
+        }
         switch code {
+        case 1: // S toggles a finite energy reservoir, refilled on each wave.
+            guard !stopped, shieldEnergy > 0 else { break }
+            shieldActive.toggle()
+            shieldNode.isHidden = !shieldActive
+            ArcadeAudio.shared.play(.shield)
         case 35: // P
             if !over {
                 stopped.toggle()
