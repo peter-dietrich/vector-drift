@@ -192,45 +192,71 @@ final class ArcadeAudio {
         play(effect)
     }
 
+    /// Dry, noise-based rock impacts rather than ringing oscillators.
+    /// A broadband fracture, dense midrange rubble and a low band-limited
+    /// thump are shaped independently. No sustained pitched sine wave.
     private func playRockBreakSample(_ effect: Effect) {
-        let scale: Double
+        let weight: Double
         switch effect {
-        case .rockBurstSmall: scale = 0.65
-        case .rockBurstMedium: scale = 1.0
-        case .rockBurstLarge: scale = 1.45
+        case .rock: weight = 0.35           // Nonfatal crack/chip
+        case .rockBurstSmall: weight = 0.64
+        case .rockBurstMedium: weight = 1.0
+        case .rockBurstLarge: weight = 1.46
         default: return
         }
-        let duration = 0.19 + scale * 0.16
+
+        let duration = 0.105 + weight * 0.24
         let frames = AVAudioFrameCount(duration * format.sampleRate)
-        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames),
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format,
+                                            frameCapacity: frames),
               let samples = buffer.floatChannelData?.pointee else { return }
         buffer.frameLength = frames
 
-        let variation = Double.random(in: 0.90...1.10)
-        let crackFrequency = (640 / scale) * variation
-        let bassFrequency = (135 / scale) * variation
-        var gritFiltered: Double = 0
-        var lastGrit: Double = 0
+        let sampleRate = format.sampleRate
+        let variation = Double.random(in: 0.88...1.12)
+        // Overlapping one-pole filters form physical-sounding noise bands.
+        // Using noise rather than a harmonic tone removes the tin-can ring.
+        let lowAlpha = 1 - exp(-2 * .pi * (255 / weight) / sampleRate)
+        let subAlpha = 1 - exp(-2 * .pi * (47 / weight) / sampleRate)
+        let midAlpha = 1 - exp(-2 * .pi * (1550 / weight) / sampleRate)
+        var lowPass = 0.0
+        var subPass = 0.0
+        var midPass = 0.0
+        var previousWhite = 0.0
+
         for index in 0..<Int(frames) {
-            let t = Double(index) / format.sampleRate
+            let t = Double(index) / sampleRate
             let progress = t / duration
-            let grit = Double.random(in: -1...1)
-            // Short brittle fracture, low-end impact and a gritty falling tail.
-            gritFiltered = gritFiltered * 0.75 + grit * 0.25
-            let sharp = (grit - lastGrit) * exp(-t * (49 / scale))
-            let fracture = sin(2 * .pi * crackFrequency * t) *
-                           exp(-t * (33 / scale))
-            let thud = sin(2 * .pi * bassFrequency * t) *
-                       exp(-t * (13 / scale))
-            let debris = gritFiltered * exp(-t * (8 / scale))
-            let microCrack = sin(2 * .pi * crackFrequency * 1.63 * t) *
-                             exp(-abs(t - 0.058 * scale) * 90) * 0.15
-            let envelope = min(1, t * 420) * pow(max(0, 1 - progress), 0.75)
-            let sample = (sharp * 0.31 + fracture * 0.17 +
-                          thud * 0.45 + debris * 0.38 + microCrack) *
-                          envelope * 0.42
+            let white = Double.random(in: -1...1)
+
+            lowPass += lowAlpha * (white - lowPass)
+            subPass += subAlpha * (white - subPass)
+            midPass += midAlpha * (white - midPass)
+
+            let lowBody = lowPass - subPass
+            let grittyRubble = midPass - lowPass
+            let drySnap = white - midPass
+
+            let firstCrack = exp(-t * 135 * variation)
+            // Rocks often shear in two stages before the remaining grit falls.
+            let secondaryAt = 0.030 + 0.022 * weight
+            let secondCrack = t >= secondaryAt
+                ? exp(-(t - secondaryAt) * 96 * variation) : 0.0
+            let bodyEnvelope = exp(-t * (9.8 / weight) * variation)
+            let rubbleEnvelope = exp(-t * (7.3 / weight))
+            let attack = min(1.0, t * 1800)
+            let release = pow(max(0, 1 - progress), 1.2)
+
+            // More size = more low-mid weight and a longer tumbling tail.
+            // High frequencies are isolated to brief impacts, not ringing.
+            let crack = drySnap * (firstCrack * 0.22 + secondCrack * 0.10)
+            let thump = lowBody * (1.30 + weight * 0.43) * bodyEnvelope
+            let crumble = grittyRubble * (0.32 + weight * 0.10) * rubbleEnvelope
+            let fizz = (white - previousWhite) * firstCrack * 0.035
+            let sample = (crack + thump + crumble + fizz) *
+                         attack * release * 0.82
             samples[index] = Float(max(-1, min(1, sample)))
-            lastGrit = grit
+            previousWhite = white
         }
         player.scheduleBuffer(buffer, completionHandler: nil)
     }
@@ -238,7 +264,7 @@ final class ArcadeAudio {
     func play(_ effect: Effect) {
         guard enabled && ensureEngine() else { return }
         switch effect {
-        case .rockBurstSmall, .rockBurstMedium, .rockBurstLarge:
+        case .rock, .rockBurstSmall, .rockBurstMedium, .rockBurstLarge:
             playRockBreakSample(effect)
             return
         default: break
@@ -250,9 +276,8 @@ final class ArcadeAudio {
         let noise: Float
         switch effect {
         case .fire: duration = 0.07; f0 = 780; f1 = 230; noise = 0.08
-        case .rock: duration = 0.12; f0 = 470; f1 = 120; noise = 0.50
-        case .rockBurstSmall, .rockBurstMedium, .rockBurstLarge:
-            return // Handled by the layered rock fracture synthesizer.
+        case .rock, .rockBurstSmall, .rockBurstMedium, .rockBurstLarge:
+            return // All rock impacts use the noise-based fracture synthesizer.
         case .shield: duration = 0.22; f0 = 350; f1 = 870; noise = 0.02
         case .bounce: duration = 0.16; f0 = 260; f1 = 710; noise = 0.05
         case .comet: duration = 0.58; f0 = 240; f1 = 38; noise = 0.25
