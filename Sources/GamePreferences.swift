@@ -30,6 +30,7 @@ struct GameRules: Codable, Equatable {
     var rockMix: RockMix
     var cometEnabled: Bool
     var saucerEnabled: Bool
+    var blackHoleEnabled: Bool
 
     static func defaults(for difficulty: String) -> GameRules {
         switch difficulty {
@@ -39,21 +40,21 @@ struct GameRules: Codable, Equatable {
                              asteroidsPerWave: 3, waveGrowth: 1, largestRock: 3,
                              largestRockHits: 2, asteroidSpeed: 0.75, startingLives: 5,
                              edgeMode: .wrap, rockMix: .largest,
-                             cometEnabled: true, saucerEnabled: true)
+                             cometEnabled: true, saucerEnabled: true, blackHoleEnabled: true)
         case "hard":
             return GameRules(maxBullets: 6, bulletLifetime: 0.55, shotInterval: 0.20,
                              shieldDuration: 3, shieldCooldown: 9,
                              asteroidsPerWave: 7, waveGrowth: 2, largestRock: 5,
                              largestRockHits: 3, asteroidSpeed: 1.32, startingLives: 2,
                              edgeMode: .wrap, rockMix: .mixed,
-                             cometEnabled: true, saucerEnabled: true)
+                             cometEnabled: true, saucerEnabled: true, blackHoleEnabled: true)
         default:
             return GameRules(maxBullets: 6, bulletLifetime: 0.95, shotInterval: 0.16,
                              shieldDuration: 5, shieldCooldown: 7,
                              asteroidsPerWave: 4, waveGrowth: 1, largestRock: 4,
                              largestRockHits: 2, asteroidSpeed: 1.0, startingLives: 3,
                              edgeMode: .wrap, rockMix: .mixed,
-                             cometEnabled: true, saucerEnabled: true)
+                             cometEnabled: true, saucerEnabled: true, blackHoleEnabled: true)
         }
     }
 
@@ -166,6 +167,9 @@ struct GameSnapshot: Codable {
     var comet: SavedMovingEnemy?
     var saucer: SavedMovingEnemy?
     var shockwaves: [SavedShockwave]
+    var blackHole: SavedMovingEnemy?
+    var timeSinceBlackHole: Double
+    var nextBlackHoleDelay: Double
 }
 
 struct GameSaveSlot: Codable, Identifiable {
@@ -328,6 +332,7 @@ struct GamePresetEditor: View {
                             value: $rules.startingLives, in: 1...15)
                     Toggle("Enable comets", isOn: $rules.cometEnabled)
                     Toggle("Enable UFO saucers", isOn: $rules.saucerEnabled)
+                    Toggle("Enable black holes", isOn: $rules.blackHoleEnabled)
                 }
             }
             .formStyle(.grouped)
