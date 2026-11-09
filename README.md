@@ -29,7 +29,7 @@ A GitHub Actions macOS build runs on pushes to `main` and pull requests. This is
 
 Click inside the playfield for keyboard focus.
 
-## v0.4 features (asteroid size tiers and heavy shield impacts)
+## v0.5 features (timed asteroid fractures and enhanced Modern Vector)
 
 - Two graphics modes, with distinct procedural graphics and effects
 - Three difficulty settings independent of graphics mode
@@ -40,6 +40,8 @@ Click inside the playfield for keyboard focus.
 - Medium introduces single-hit size-4 rocks. Hard introduces size-4 two-hit rocks and enormous size-5 three-hit rocks; initial damage cracks appear without changing the rock's size, and the second hit on the largest tier adds a second crack.
 - Easy keeps its original starting count (3, +1 per wave, capped at 12). Medium begins with 4 (+1 per wave, capped at 13), while Hard begins with 7 (+2 per wave, capped at 19). These counts exclude fragments created by splitting.
 - On **Hard**, level-4 rocks take two shots and level-5 rocks take three. Each non-final hit adds visible damage without changing rock size. Final hits split rocks into two of the next smaller tier.
+- **NEW — timed fractures:** Once a multi-hit asteroid takes damage, it becomes unstable. The first hit starts a 10-second game-time countdown; a second nonfatal hit on a size-5 asteroid reduces the remaining countdown to at most 5 seconds. A final shot still splits it immediately. Expired asteroids split into two smaller rocks automatically, with no points awarded for the unattended breakup. Countdown pauses when the game is paused and resets on new child rocks.
+- **NEW — Modern Vector atmosphere:** added drifting parallax-style stars, denser rock ridges and mineral speckles, glowing damage flares, orange/red instability arcs, and multi-layer debris bursts with expanding plasma rings on splits. Classic stays visually restrained.
 - Comet special events in Modern and, on Hard, Classic; Hard comet intervals are much shorter
 - Comet shot creates an expanding asteroid-clearing shockwave and a 750-point bonus
 - Enemy UFO saucers with aimed shots, more accurate and frequent on Hard
@@ -67,12 +69,13 @@ Click inside the playfield for keyboard focus.
 | Added rocks per wave | +1 | +1 | +2 |
 | Maximum starting rocks per wave | 12 | 13 | 19 |
 | Giant hit points | N/A | size 4: 1 | size 4: 2; size 5: 3 |
+| Damaged rock fracture timer | N/A | N/A | 10s after first hit; at most 5s after second nonfatal hit |
 
 Comet and UFO spawns begin in wave 2. Classic mode only gets comet events on Hard. Switching difficulty starts a new game.
 
 ## Future improvements
 
-Modern Vector is still a procedural 2D look. Planned polish: detailed animated asteroid surfaces, parallax starfield, more varied particle fields, hit-stop/shake, heat and glow compositing, environmental hazards, controller support, full sound design, and public-release packaging.
+Modern Vector remains a procedural 2D style, now with surface facets, striations, glints, drifting stars, timed damage arcs and layered particle breakups. Longer-term improvements can use Metal shaders for true dynamic surface lighting, heat distortions and volumetric nebulae. Controller support, final sound design and release packaging remain open.
 
 ## Licensing and release
 

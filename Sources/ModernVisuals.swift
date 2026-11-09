@@ -37,9 +37,16 @@ enum ModernVisuals {
             star.alpha = CGFloat.random(in: 0.14...0.65)
             let baseline = star.alpha
             let duration = Double.random(in: 1.3...3.7)
-            star.run(.repeatForever(.sequence([
-                .fadeAlpha(to: max(0.08, baseline * 0.3), duration: duration),
-                .fadeAlpha(to: baseline, duration: duration)
+            let drifting = CGFloat.random(in: 2...12) * (r / 1.65)
+            star.run(.repeatForever(.group([
+                .sequence([
+                    .fadeAlpha(to: max(0.08, baseline * 0.3), duration: duration),
+                    .fadeAlpha(to: baseline, duration: duration)
+                ]),
+                .sequence([
+                    .moveBy(x: -drifting, y: drifting * 0.32, duration: duration * 2),
+                    .moveBy(x: drifting, y: -drifting * 0.32, duration: duration * 2)
+                ])
             ])))
             layer.addChild(star)
         }
@@ -73,6 +80,37 @@ enum ModernVisuals {
             facet.strokeColor = SKColor(calibratedRed: 0.35, green: 0.68, blue: 0.83, alpha: 0.37)
             facet.lineWidth = 0.9
             detail.addChild(facet)
+        }
+
+        // Layered striations and edge reflections give rotating rocks
+        // more apparent depth without importing third-party textures.
+        let ridges = radius >= 60 ? 13 : radius >= 35 ? 8 : 4
+        for index in 0..<ridges {
+            let angle = CGFloat(index) * .pi * 2 / CGFloat(ridges)
+            let length = CGFloat.random(in: 0.16...0.39) * radius
+            let startRadius = CGFloat.random(in: 0.38...0.72) * radius
+            let p = CGMutablePath()
+            p.move(to: CGPoint(x: cos(angle) * startRadius, y: sin(angle) * startRadius))
+            p.addLine(to: CGPoint(x: cos(angle + 0.20) * (startRadius + length),
+                                  y: sin(angle + 0.20) * (startRadius + length)))
+            let ridge = SKShapeNode(path: p)
+            ridge.strokeColor = index.isMultiple(of: 3)
+                ? SKColor(calibratedRed: 0.64, green: 0.91, blue: 1, alpha: 0.58)
+                : SKColor(calibratedRed: 0.03, green: 0.10, blue: 0.22, alpha: 0.75)
+            ridge.lineWidth = CGFloat.random(in: 0.8...2)
+            detail.addChild(ridge)
+        }
+
+        let mineralCount = radius >= 60 ? 9 : radius >= 35 ? 5 : 2
+        for _ in 0..<mineralCount {
+            let speck = SKShapeNode(circleOfRadius: CGFloat.random(in: 0.5...1.8))
+            let theta = CGFloat.random(in: 0...(2 * .pi))
+            let d = CGFloat.random(in: 0...0.6) * radius
+            speck.position = CGPoint(x: cos(theta) * d, y: sin(theta) * d)
+            speck.fillColor = .white.withAlphaComponent(0.72)
+            speck.strokeColor = .clear
+            speck.glowWidth = 3
+            detail.addChild(speck)
         }
 
         for _ in 0..<(radius > 25 ? 3 : 1) {
@@ -213,6 +251,51 @@ enum ModernVisuals {
                     .moveBy(x: dx, y: dy, duration: duration),
                     .fadeOut(withDuration: duration),
                     .rotate(byAngle: CGFloat.random(in: -2...2), duration: duration)
+                ]),
+                .removeFromParent()
+            ]))
+        }
+    }
+
+    /// Warm fracture flare on damaged rock. Distinct from a true split:
+    /// the rock stays the same size until its last hit or timer expires.
+    static func damageFlare(in layer: SKNode, at point: CGPoint,
+                            radius: CGFloat, stage: Int) {
+        let halo = SKShapeNode(circleOfRadius: radius * 0.65)
+        halo.position = point
+        halo.fillColor = fire.withAlphaComponent(0.16 + CGFloat(stage) * 0.07)
+        halo.strokeColor = .clear
+        halo.glowWidth = radius * 0.45
+        halo.zPosition = 7
+        layer.addChild(halo)
+        halo.run(.sequence([
+            .group([.scale(to: 1.3, duration: 0.4),
+                    .fadeOut(withDuration: 0.4)]),
+            .removeFromParent()
+        ]))
+        burst(in: layer, at: point, color: stage > 1 ? .systemRed : fire,
+              count: min(24, 7 + stage * 7))
+    }
+
+    /// Multi-layer shard field and expanding plasma rings for a rock breakup.
+    static func fractureBurst(in layer: SKNode, at point: CGPoint,
+                              radius: CGFloat, intensity: Int) {
+        burst(in: layer, at: point, color: ice, count: min(34, 8 + intensity * 5))
+        burst(in: layer, at: point, color: fire, count: min(26, 5 + intensity * 3))
+        for scale in [0.7, 1.15] as [CGFloat] {
+            let ring = SKShapeNode(circleOfRadius: max(7, radius * 0.6))
+            ring.position = point
+            ring.lineWidth = scale < 1 ? 3.5 : 1.5
+            ring.strokeColor = scale < 1 ? fire : ice
+            ring.fillColor = .clear
+            ring.glowWidth = 15
+            ring.zPosition = 8
+            layer.addChild(ring)
+            let duration: TimeInterval = scale < 1 ? 0.45 : 0.68
+            ring.run(.sequence([
+                .group([
+                    .scale(to: scale * 2.0, duration: duration),
+                    .fadeOut(withDuration: duration)
                 ]),
                 .removeFromParent()
             ]))

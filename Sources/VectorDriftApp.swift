@@ -288,6 +288,10 @@ private struct Boulder {
     var crack: SKShapeNode
     var secondCrack: SKShapeNode
     var lastShieldImpact: CGFloat
+    /// nil means this asteroid has never been damaged.
+    var fractureRemaining: CGFloat?
+    var fractureDuration: CGFloat
+    var fractureRing: SKShapeNode
 }
 private struct Laser {
     var node: SKShapeNode
@@ -539,6 +543,18 @@ final class DriftScene: SKScene {
                 margin: boulders[i].radius)
             boulders[i].node.zRotation += boulders[i].spin * dt
         }
+        // Only previously damaged multi-hit asteroids can self-fracture.
+        // Using game dt means these timers pause along with the game.
+        for index in boulders.indices.reversed() {
+            guard let remaining = boulders[index].fractureRemaining else { continue }
+            let updated = remaining - dt
+            if updated <= 0 {
+                fragmentRock(at: index, byPlayer: false)
+            } else {
+                boulders[index].fractureRemaining = updated
+                updateFractureIndicator(at: index)
+            }
+        }
         // Shield contact reflects incoming asteroids instead of merely allowing
         // them to overlap the protected ship. It does not destroy the rock.
         if shieldActive && !ship.isHidden {
@@ -586,6 +602,13 @@ final class DriftScene: SKScene {
                     boulders[j].hitPoints -= 1
                     let rock = boulders[j]
                     let damageStage = rock.maximumHitPoints - rock.hitPoints
+                    // First hit: 10s. Second nonfatal hit: 5s. An
+                    // extra hit never extends an existing countdown.
+                    let countdown = CGFloat(10) / CGFloat(damageStage)
+                    boulders[j].fractureRemaining = min(
+                        rock.fractureRemaining ?? countdown, countdown
+                    )
+                    boulders[j].fractureDuration = countdown
                     rock.crack.isHidden = false
                     rock.secondCrack.isHidden = damageStage < 2
                     rock.node.lineWidth = damageStage == 1 ? 3 : 3.8
@@ -593,35 +616,14 @@ final class DriftScene: SKScene {
                         ? (damageStage == 1 ? ModernVisuals.fire : .systemRed)
                         : (damageStage == 1 ? .yellow : .orange)
                     ArcadeAudio.shared.play(.rock)
+                    updateFractureIndicator(at: j)
                     if modern {
-                        ModernVisuals.burst(in: self, at: rock.node.position,
-                                            color: damageStage == 1 ? ModernVisuals.fire : .systemRed,
-                                            count: 5 + rock.level * 2)
+                        ModernVisuals.damageFlare(in: self, at: rock.node.position,
+                                                  radius: rock.radius, stage: damageStage)
                     }
-                    continue // A hit changes its appearance, never its size.
+                    continue // No change in radius until final shot or countdown.
                 }
-                let rock = boulders.remove(at: j)
-                rock.node.removeFromParent()
-                ArcadeAudio.shared.play(.rock)
-                if modern {
-                    ModernVisuals.burst(in: self, at: rock.node.position,
-                                        color: ModernVisuals.ice, count: rock.level * 5)
-                }
-                award(rock.level == 5 ? 90 :
-                      rock.level == 4 ? 60 :
-                      rock.level == 3 ? 20 :
-                      rock.level == 2 ? 50 : 100)
-                if rock.level > 1 {
-                    for direction in [-0.75, 0.75] as [CGFloat] {
-                        let angle = atan2(rock.velocity.dy, rock.velocity.dx) + direction
-                        // Each split gets its own speed based on the *new* smaller size.
-                        let nextLevel = rock.level - 1
-                        let speed = rockSpeed(for: nextLevel)
-                        spawnRock(level: nextLevel, at: rock.node.position,
-                                  velocity: CGVector(dx: cos(angle) * speed, dy: sin(angle) * speed))
-                    }
-                }
-                updateHud()
+                fragmentRock(at: j, byPlayer: true)
             }
         }
 
@@ -805,6 +807,61 @@ final class DriftScene: SKScene {
         return CGFloat.random(in: baseRange) * difficulty.speedMultiplier * waveFactor
     }
 
+    /// A player shot and the delayed fracture use exactly the same
+    /// split progression. Automatic fractures award no points.
+    private func fragmentRock(at index: Int, byPlayer: Bool) {
+        let rock = boulders.remove(at: index)
+        let position = rock.node.position
+        rock.node.removeFromParent()
+        ArcadeAudio.shared.play(.rock)
+        if modern {
+            ModernVisuals.fractureBurst(in: self, at: position,
+                                        radius: rock.radius, intensity: rock.level)
+        }
+        if byPlayer {
+            award(rock.level == 5 ? 90 :
+                  rock.level == 4 ? 60 :
+                  rock.level == 3 ? 20 :
+                  rock.level == 2 ? 50 : 100)
+        }
+        if rock.level > 1 {
+            let travelAngle = atan2(rock.velocity.dy, rock.velocity.dx)
+            let nextLevel = rock.level - 1
+            for spread: CGFloat in [-0.75, 0.75] {
+                let angle = travelAngle + spread
+                let speed = rockSpeed(for: nextLevel)
+                spawnRock(level: nextLevel, at: position,
+                          velocity: CGVector(dx: cos(angle) * speed,
+                                             dy: sin(angle) * speed))
+            }
+        }
+    }
+
+    private func updateFractureIndicator(at index: Int) {
+        let rock = boulders[index]
+        guard let remaining = rock.fractureRemaining else {
+            rock.fractureRing.isHidden = true
+            return
+        }
+        let progress = max(0, min(1, remaining / max(rock.fractureDuration, 0.01)))
+        if modern {
+            let arc = CGMutablePath()
+            arc.addArc(center: .zero, radius: rock.radius + 8,
+                       startAngle: -.pi / 2,
+                       endAngle: -.pi / 2 + 2 * .pi * progress,
+                       clockwise: false)
+            rock.fractureRing.path = arc
+            rock.fractureRing.isHidden = false
+            rock.fractureRing.strokeColor = progress < 0.3 ? .systemRed : ModernVisuals.fire
+            rock.fractureRing.glowWidth = progress < 0.3 ? 12 : 5
+        } else {
+            rock.fractureRing.isHidden = true
+        }
+        if modern && progress < 0.25 {
+            rock.node.glowWidth = 4 + 4 * abs(sin(elapsed * 9))
+        }
+    }
+
     private func rockRadius(for level: Int) -> CGFloat {
         switch level {
         case 5: return 96
@@ -841,6 +898,12 @@ final class DriftScene: SKScene {
         secondCrack.zRotation = .pi * 0.73
         secondCrack.setScale(0.85)
         node.addChild(secondCrack)
+        let fractureRing = SKShapeNode()
+        fractureRing.lineWidth = 2.1
+        fractureRing.fillColor = .clear
+        fractureRing.zPosition = 6
+        fractureRing.isHidden = true
+        node.addChild(fractureRing)
         addChild(node)
         let hitPoints = difficulty.hitsToSplit(level: level)
         let spinSpeed = CGFloat.random(in: -1.2...1.2) /
@@ -849,7 +912,8 @@ final class DriftScene: SKScene {
                                 level: level, spin: spinSpeed, detail: detail,
                                 hitPoints: hitPoints, maximumHitPoints: hitPoints,
                                 crack: crack, secondCrack: secondCrack,
-                                lastShieldImpact: -10))
+                                lastShieldImpact: -10, fractureRemaining: nil,
+                                fractureDuration: 0, fractureRing: fractureRing))
         styleRock(node, detail: detail)
     }
 
@@ -883,6 +947,9 @@ final class DriftScene: SKScene {
             rock.secondCrack.isHidden = damageStage < 2
             rock.crack.strokeColor = modern ? ModernVisuals.fire : .yellow
             rock.secondCrack.strokeColor = modern ? .systemRed : .orange
+            if rock.fractureRemaining != nil {
+                rock.fractureRing.isHidden = !modern
+            }
         }
         ArcadeEffects.updateShield(shieldNode, modern: modern,
                                    remaining: shieldActive ? shieldEnergy : 0,
