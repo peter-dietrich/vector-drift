@@ -131,11 +131,20 @@ fileprivate enum Difficulty: String, CaseIterable, Identifiable {
     }
 
     func hitsToSplit(level: Int) -> Int {
-        guard self == .hard else { return 1 }
-        switch level {
-        case 5: return 3
-        case 4: return 2
-        default: return 1
+        // Every difficulty has a multi-hit upper tier so the unstable
+        // fracture timer is meaningful in Easy, Medium, and Hard.
+        switch self {
+        case .easy: return level == 3 ? 2 : 1
+        case .medium: return level == 4 ? 2 : 1
+        case .hard: return level == 5 ? 3 : level == 4 ? 2 : 1
+        }
+    }
+
+    var shieldCooldown: CGFloat {
+        switch self {
+        case .easy: return 5
+        case .medium: return 7
+        case .hard: return 9
         }
     }
 }
@@ -292,6 +301,7 @@ private struct Boulder {
     var fractureRemaining: CGFloat?
     var fractureDuration: CGFloat
     var fractureRing: SKShapeNode
+    var surface: SKSpriteNode
 }
 private struct Laser {
     var node: SKShapeNode
@@ -343,6 +353,7 @@ final class DriftScene: SKScene {
     private var scoreRecorded = false
     private var shieldActive = false
     private var shieldEnergy: CGFloat = 0
+    private var shieldRechargeRemaining: CGFloat = 0
     private let shieldNode = ArcadeEffects.shield()
     private var backgroundLayer: SKNode?
     private let modernShipDetail = ModernVisuals.shipDetail()
@@ -372,7 +383,9 @@ final class DriftScene: SKScene {
         return SKShapeNode(path: p)
     }()
     private let hud = SKLabelNode(fontNamed: "Menlo-Bold")
+    private let statusHUD = SKLabelNode(fontNamed: "Menlo-Bold")
     private let message = SKLabelNode(fontNamed: "Menlo-Bold")
+    private let stagePanel = SKShapeNode(rectOf: CGSize(width: 440, height: 116), cornerRadius: 17)
 
     override func didMove(to view: SKView) {
         guard !ready else { return }
@@ -388,16 +401,31 @@ final class DriftScene: SKScene {
         hud.fontSize = 15
         hud.horizontalAlignmentMode = .left
         hud.verticalAlignmentMode = .top
+        hud.zPosition = 90
         addChild(hud)
-        message.fontSize = 28
+        statusHUD.fontSize = 14
+        statusHUD.horizontalAlignmentMode = .right
+        statusHUD.verticalAlignmentMode = .top
+        statusHUD.zPosition = 90
+        addChild(statusHUD)
+        stagePanel.zPosition = 80
+        stagePanel.fillColor = SKColor(calibratedRed: 0.02, green: 0.045, blue: 0.085, alpha: 0.93)
+        stagePanel.strokeColor = ModernVisuals.ice.withAlphaComponent(0.52)
+        stagePanel.lineWidth = 1.4
+        stagePanel.isHidden = true
+        addChild(stagePanel)
+        message.zPosition = 81
+        message.fontSize = 25
         message.horizontalAlignmentMode = .center
         addChild(message)
         showTitle()
     }
 
     override func didChangeSize(_ oldSize: CGSize) {
-        hud.position = CGPoint(x: 18, y: size.height - 18)
+        hud.position = CGPoint(x: 20, y: size.height - 20)
+        statusHUD.position = CGPoint(x: size.width - 20, y: size.height - 20)
         message.position = CGPoint(x: size.width / 2, y: size.height / 2)
+        stagePanel.position = CGPoint(x: size.width / 2, y: size.height / 2)
     }
 
     func restart() {
@@ -417,6 +445,7 @@ final class DriftScene: SKScene {
         scoreRecorded = false
         shieldActive = false
         shieldEnergy = difficulty.shieldDuration
+        shieldRechargeRemaining = 0
         lastComet = 0
         nextCometDelay = CGFloat.random(in: difficulty.cometDelay)
         lastSaucer = 0
@@ -431,6 +460,7 @@ final class DriftScene: SKScene {
         ship.isHidden = false
         shieldNode.isHidden = true
         message.text = ""
+        stagePanel.isHidden = true
         ArcadeAudio.shared.play(.wave)
         spawnWave()
         updateHud()
@@ -453,7 +483,8 @@ final class DriftScene: SKScene {
         ArcadeAudio.shared.stopThrust()
         titleVisible = true
         over = false
-        message.text = "VECTOR DRIFT · PRESS RETURN"
+        message.text = "VECTOR DRIFT  •  PRESS RETURN"
+        stagePanel.isHidden = false
         message.position = CGPoint(x: size.width / 2, y: size.height / 2)
         updateHud()
         updateStyle()
@@ -467,11 +498,16 @@ final class DriftScene: SKScene {
             return
         }
         switch code {
-        case 1: // S toggles a finite energy reservoir, refilled on each wave.
-            guard !stopped, shieldEnergy > 0 else { break }
-            shieldActive.toggle()
-            shieldNode.isHidden = !shieldActive
-            ArcadeAudio.shared.play(.shield)
+        case 1: // S toggles an unlimited number of timed shield charges.
+            guard !stopped else { break }
+            if shieldActive {
+                startShieldRecharge()
+            } else if shieldRechargeRemaining <= 0 {
+                shieldActive = true
+                shieldEnergy = difficulty.shieldDuration
+                shieldNode.isHidden = false
+                ArcadeAudio.shared.play(.shield)
+            }
         case 35: // P
             if !over {
                 stopped.toggle()
@@ -494,9 +530,13 @@ final class DriftScene: SKScene {
         elapsed += dt
         if shieldActive {
             shieldEnergy = max(0, shieldEnergy - dt)
-            if shieldEnergy == 0 {
-                shieldActive = false
-                shieldNode.isHidden = true
+            if shieldEnergy <= 0 {
+                startShieldRecharge()
+            }
+        } else if shieldRechargeRemaining > 0 {
+            shieldRechargeRemaining = max(0, shieldRechargeRemaining - dt)
+            if shieldRechargeRemaining == 0 {
+                shieldEnergy = difficulty.shieldDuration
             }
         }
         ArcadeEffects.updateShield(shieldNode, modern: modern,
@@ -640,8 +680,7 @@ final class DriftScene: SKScene {
             } ?? false)) {
             lives -= 1
             ArcadeAudio.shared.stopThrust()
-            shieldActive = false
-            shieldNode.isHidden = true
+            if shieldActive { startShieldRecharge() }
             ArcadeAudio.shared.play(.ship)
             shipImpact()
             updateHud()
@@ -649,7 +688,8 @@ final class DriftScene: SKScene {
                 over = true
                 ship.isHidden = true
                 saveFinalScore()
-                message.text = "GAME OVER · PRESS RETURN"
+                message.text = "GAME OVER  •  PRESS RETURN"
+                stagePanel.isHidden = false
             } else {
                 resetShip()
                 protectedUntil = elapsed + difficulty.respawnProtection
@@ -657,9 +697,7 @@ final class DriftScene: SKScene {
         }
         if boulders.isEmpty && shockwaves.isEmpty {
             wave += 1
-            shieldEnergy = difficulty.shieldDuration
-            shieldActive = false
-            shieldNode.isHidden = true
+            // Shields recharge on their own, not just at a wave boundary.
             spawnWave()
             ArcadeAudio.shared.play(.wave)
             protectedUntil = elapsed + 1.5
@@ -758,6 +796,13 @@ final class DriftScene: SKScene {
             ModernVisuals.burst(in: self, at: point, color: ModernVisuals.ice,
                                 count: 4 + rockLevel * 4)
         }
+    }
+
+    private func startShieldRecharge() {
+        shieldActive = false
+        shieldNode.isHidden = true
+        shieldEnergy = 0
+        shieldRechargeRemaining = difficulty.shieldCooldown
     }
 
     private func hyperspace() {
@@ -892,6 +937,8 @@ final class DriftScene: SKScene {
         node.lineWidth = 1.7
         let detail = ModernVisuals.asteroidDetail(radius: radius, vertices: points)
         node.addChild(detail)
+        let surface = ModernRockTextures.create(radius: radius, outline: points)
+        node.addChild(surface)
         let crack = ArcadeEffects.damageCrack(radius: radius)
         node.addChild(crack)
         let secondCrack = ArcadeEffects.damageCrack(radius: radius)
@@ -913,13 +960,23 @@ final class DriftScene: SKScene {
                                 hitPoints: hitPoints, maximumHitPoints: hitPoints,
                                 crack: crack, secondCrack: secondCrack,
                                 lastShieldImpact: -10, fractureRemaining: nil,
-                                fractureDuration: 0, fractureRing: fractureRing))
+                                fractureDuration: 0, fractureRing: fractureRing,
+                                surface: surface))
         styleRock(node, detail: detail)
     }
 
     private func updateHud() {
-        hud.text = String(format: "SCORE %06d   HIGH %06d   WAVE %d   LIVES %d   %@   SHIELD %.1fs",
-                          score, high, wave, lives, difficulty.title.uppercased(), shieldEnergy)
+        hud.text = String(format: "SCORE %06d     BEST %06d     WAVE %02d",
+                          score, high, wave)
+        let shieldStatus: String
+        if shieldActive {
+            shieldStatus = String(format: "SHIELD %.1fs", shieldEnergy)
+        } else if shieldRechargeRemaining > 0 {
+            shieldStatus = String(format: "RECHARGING %.1fs", shieldRechargeRemaining)
+        } else {
+            shieldStatus = "SHIELD READY [S]"
+        }
+        statusHUD.text = "LIVES \(lives)    \(difficulty.title.uppercased())    \(shieldStatus)"
     }
 
     private func updateStyle() {
@@ -931,9 +988,15 @@ final class DriftScene: SKScene {
         ship.strokeColor = color
         ship.glowWidth = modern ? 5 : 0
         hud.fontColor = color
+        statusHUD.fontColor = modern ? ModernVisuals.ice : .white
         message.fontColor = color
+        stagePanel.fillColor = modern
+            ? SKColor(calibratedRed: 0.018, green: 0.035, blue: 0.085, alpha: 0.95)
+            : SKColor(calibratedWhite: 0.07, alpha: 0.95)
+        stagePanel.strokeColor = modern ? ModernVisuals.ice.withAlphaComponent(0.55) : .white
         for rock in boulders {
             styleRock(rock.node, detail: rock.detail)
+            rock.surface.isHidden = !modern
             let damageStage = rock.maximumHitPoints - rock.hitPoints
             if damageStage > 0 {
                 rock.node.lineWidth = damageStage == 1 ? 3 : 3.8
@@ -981,9 +1044,13 @@ final class DriftScene: SKScene {
 
     private func styleRock(_ node: SKShapeNode, detail: SKNode) {
         detail.isHidden = !modern
-        node.strokeColor = modern ? ModernVisuals.ice : .white
-        node.fillColor = modern ? ModernVisuals.rock : .clear
-        node.glowWidth = modern ? 5 : 0
+        for child in node.children where child is SKSpriteNode {
+            child.isHidden = !modern
+        }
+        node.strokeColor = modern ? SKColor(calibratedRed: 0.54, green: 0.73, blue: 0.83, alpha: 1) : .white
+        node.fillColor = .clear
+        node.glowWidth = modern ? 1.4 : 0
+        node.lineWidth = modern ? 1.1 : 1.7
     }
 
     private func award(_ amount: Int) {
