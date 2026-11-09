@@ -69,6 +69,11 @@ private struct SpaceShot3D {
     var velocity: SCNVector3
     var remaining: Float
 }
+private struct NuclearMissile3D {
+    let node: SCNNode
+    var velocity: SCNVector3
+    var fuse: Float
+}
 
 final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
     let scene = SCNScene()
@@ -76,6 +81,8 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
     let camera = SCNNode()
     private var rocks: [SpaceRock3D] = []
     private var shots: [SpaceShot3D] = []
+    private var nuclearMissile: NuclearMissile3D?
+    private var missilesRemaining = 2
     private var pressed = Set<UInt16>()
     private var previous: TimeInterval = 0
     private var elapsed: Float = 0
@@ -207,6 +214,9 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
         for shot in shots { shot.node.removeFromParentNode() }
         rocks.removeAll()
         shots.removeAll()
+        nuclearMissile?.node.removeFromParentNode()
+        nuclearMissile = nil
+        missilesRemaining = rules.missilesPerWave
         pressed.removeAll()
         ship.position = SCNVector3Zero
         ship.eulerAngles = SCNVector3Zero
@@ -235,6 +245,7 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
         if down { pressed.insert(code) } else { pressed.remove(code) }
         guard down && !repeatKey else { return }
         switch code {
+        case 45: if !paused { launchNuclearMissile() } // N
         case 35: paused.toggle() // P
         case 15: restart() // R
         case 1: // S
@@ -372,6 +383,7 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
             shieldCooldownRemaining = max(0, shieldCooldownRemaining - dt)
         }
 
+        updateNuclearMissile(dt)
         for i in rocks.indices.reversed() {
             rocks[i].node.position = wrapped(add(rocks[i].node.position, multiply(rocks[i].velocity, dt)))
             rocks[i].node.eulerAngles.y += dt * 0.15
@@ -439,8 +451,67 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
         }
         if rocks.isEmpty {
             wave += 1
+            missilesRemaining = rules.missilesPerWave
             spawnWave()
         }
+    }
+
+    private func launchNuclearMissile() {
+        guard missilesRemaining > 0 && nuclearMissile == nil && !gameOver else { return }
+        missilesRemaining -= 1
+        let body = SCNCapsule(capRadius: 0.34, height: 1.9)
+        let material = SCNMaterial()
+        material.diffuse.contents = NSColor.orange
+        material.emission.contents = NSColor(calibratedRed: 0.65, green: 0.30, blue: 0.08, alpha: 1)
+        body.firstMaterial = material
+        let node = SCNNode(geometry: body)
+        let heading = forward()
+        node.position = add(ship.position, multiply(heading, 3.7))
+        node.eulerAngles = ship.eulerAngles
+        scene.rootNode.addChildNode(node)
+        nuclearMissile = NuclearMissile3D(node: node,
+            velocity: add(multiply(shipVelocity, 0.35), multiply(heading, 42)),
+            fuse: 2.1)
+        if soundEnabled { ArcadeAudio.shared.play(.comet) }
+    }
+
+    private func updateNuclearMissile(_ dt: Float) {
+        guard var missile = nuclearMissile else { return }
+        missile.fuse -= dt
+        missile.node.position = wrapped(add(missile.node.position,
+                                             multiply(missile.velocity, dt)))
+        missile.velocity = multiply(missile.velocity, max(0, 1 - dt * 0.65))
+        if missile.fuse > 0 {
+            nuclearMissile = missile
+            return
+        }
+        nuclearMissile = nil
+        missile.node.removeFromParentNode()
+        let point = missile.node.position
+        // A spherical blast approximately one third of the arena's span.
+        let blastRadius: Float = 48
+        let sphere = SCNNode(geometry: SCNSphere(radius: 1))
+        let effect = SCNMaterial()
+        effect.diffuse.contents = NSColor(calibratedRed: 1, green: 0.48, blue: 0.12, alpha: 0.24)
+        effect.emission.contents = NSColor.orange
+        effect.transparency = 0.30
+        effect.fillMode = .lines
+        sphere.geometry?.materials = [effect]
+        sphere.position = point
+        scene.rootNode.addChildNode(sphere)
+        sphere.runAction(.sequence([
+            .group([.scale(to: CGFloat(blastRadius), duration: 0.65),
+                    .fadeOut(duration: 0.65)]),
+            .removeFromParentNode()
+        ]))
+        for index in rocks.indices.reversed() {
+            let rock = rocks[index]
+            guard length(subtract(rock.node.position, point)) < blastRadius + radius(for: rock.level) else { continue }
+            rock.node.removeFromParentNode()
+            rocks.remove(at: index)
+            score += 20 * (6 - rock.level)
+        }
+        if soundEnabled { ArcadeAudio.shared.play(.comet) }
     }
 
     private func radius(for level: Int) -> Float {
@@ -452,7 +523,7 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
         rock.node.removeFromParentNode()
         if awardPoints { score += 20 * (6 - rock.level) }
         guard rock.level > 1 else { return }
-        for side: Float in [-1, 1] {
+        for side in [-1.0, 1.0] as [Float] {
             let offset = SCNVector3(side * 2, side * 1.5, -side)
             let nextDirection = normalize(add(rock.velocity, multiply(offset, 25)))
             addRock(level: rock.level - 1, at: rock.node.position,
