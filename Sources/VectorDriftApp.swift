@@ -1205,6 +1205,9 @@ final class DriftScene: SKScene {
         comet?.node.removeFromParent()
         comet = nil
         for wave in shockwaves { wave.ring.removeFromParent() }
+        blackHole?.node.removeFromParent()
+        blackHole = nil
+        backgroundLayer?.setScale(1)
         nuclearMissile?.node.removeFromParent()
         nuclearMissile = nil
         shockwaves.removeAll()
@@ -1765,7 +1768,12 @@ final class DriftScene: SKScene {
                 SavedShockwave(center: snapshotPoint($0.center),
                                elapsed: Double($0.elapsed))
             },
-            blackHole: nil, timeSinceBlackHole: 0, nextBlackHoleDelay: 0,
+            blackHole: blackHole.map {
+                SavedMovingEnemy(position: snapshotPoint($0.node.position),
+                                 velocity: SavedVector(x: 0, y: 0),
+                                 remaining: Double($0.remaining))
+            }, timeSinceBlackHole: Double(elapsed - lastBlackHole),
+            nextBlackHoleDelay: Double(nextBlackHoleDelay),
             missilesRemaining: missilesRemaining, missile: missileState
         )
     }
@@ -1808,6 +1816,8 @@ final class DriftScene: SKScene {
         nextSaucerDelay = CGFloat(snapshot.nextSaucerDelay)
         lastSaucerShot = elapsed - CGFloat(snapshot.timeSinceSaucerShot)
         missilesRemaining = snapshot.missilesRemaining
+        lastBlackHole = elapsed - CGFloat(snapshot.timeSinceBlackHole)
+        nextBlackHoleDelay = CGFloat(snapshot.nextBlackHoleDelay)
         titleVisible = false
         over = false
         stopped = false
@@ -1866,6 +1876,11 @@ final class DriftScene: SKScene {
             shockwaves.append(Shockwave(center: point(saved.center),
                                         elapsed: CGFloat(saved.elapsed),
                                         ring: ring, hit: [], maxRadius: 350))
+        }
+        if let saved = snapshot.blackHole {
+            spawnBlackHole()
+            blackHole?.node.position = point(saved.position)
+            blackHole?.remaining = CGFloat(saved.remaining)
         }
         if let saved = snapshot.missile {
             let missile = SKShapeNode(ellipseOf: CGSize(width: 11, height: 19))
