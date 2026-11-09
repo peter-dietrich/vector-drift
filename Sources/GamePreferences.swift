@@ -1,6 +1,44 @@
 import Foundation
 import SwiftUI
 
+// All modes share this ammunition reserve. "Max Bullets" in custom rules
+// continues to cap simultaneously active projectiles; it is separate from
+// the 1,000-round consumable magazine.
+struct AmmoReserve: Codable {
+    static let capacity = 1000
+    static let refillDelay: CGFloat = 5
+    static let refillRate: CGFloat = 100 // rounds per second after idle delay
+
+    var rounds = capacity
+    var partialRound: CGFloat = 0
+
+    mutating func fire() -> Bool {
+        guard rounds > 0 else { return false }
+        rounds -= 1
+        partialRound = 0
+        return true
+    }
+
+    mutating func update(dt: CGFloat, secondsSinceShot: CGFloat,
+                         triggerHeld: Bool) {
+        guard !triggerHeld, rounds < Self.capacity,
+              secondsSinceShot >= Self.refillDelay else { return }
+        partialRound += dt * Self.refillRate
+        let gained = Int(partialRound)
+        guard gained > 0 else { return }
+        rounds = min(Self.capacity, rounds + gained)
+        partialRound -= CGFloat(gained)
+        if rounds == Self.capacity { partialRound = 0 }
+    }
+
+    func rechargeStatus(secondsSinceShot: CGFloat) -> String {
+        if rounds == Self.capacity { return "AMMO FULL" }
+        let wait = Self.refillDelay - secondsSinceShot
+        if wait > 0 { return String(format: "RECHARGE IN %.1fS", Double(wait)) }
+        return "AMMO REFILLING"
+    }
+}
+
 // User-editable arcade rules. Built-in difficulties are never mutated.
 struct GameRules: Codable, Equatable {
     enum EdgeMode: String, Codable, CaseIterable, Identifiable {
@@ -174,6 +212,8 @@ struct GameSnapshot: Codable {
     var nextBlackHoleDelay: Double
     var missilesRemaining: Int
     var missile: SavedProjectile?
+    // Optional for backward-compatible decoding of older saved games.
+    var ammoReserve: AmmoReserve?
 }
 
 struct GameSaveSlot: Codable, Identifiable {
