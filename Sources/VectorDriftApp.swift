@@ -519,7 +519,7 @@ final class DriftScene: SKScene {
                     boulders[j].node.lineWidth = 3
                     boulders[j].node.strokeColor = modern ? ModernVisuals.fire : .yellow
                     ArcadeAudio.shared.play(.rock)
-                    ModernVisuals.burst(in: self, at: lasersImpactPoint(boulders[j].node.position),
+                    ModernVisuals.burst(in: self, at: boulders[j].node.position,
                                         color: modern ? ModernVisuals.fire : .yellow, count: 7)
                     continue
                 }
@@ -891,6 +891,107 @@ final class DriftScene: SKScene {
                 shockwaves.remove(at: i).ring.removeFromParent()
             }
         }
+    }
+
+    private func clearEnemies() {
+        saucer?.node.removeFromParent()
+        saucer = nil
+        for shot in enemyShots { shot.node.removeFromParent() }
+        enemyShots.removeAll()
+    }
+
+    private func updateSaucer(_ dt: CGFloat) {
+        if saucer == nil && wave >= 2 && elapsed - lastSaucer > nextSaucerDelay {
+            spawnSaucer()
+        }
+        guard var enemy = saucer else { return }
+        enemy.remaining -= dt
+        enemy.node.position.x += enemy.velocity.dx * dt
+        enemy.node.position.y += sin(elapsed * 2.6) * 22 * dt
+        if elapsed - lastSaucerShot > (difficulty == .hard ? 1.3 : difficulty == .medium ? 2.0 : 2.8) {
+            lastSaucerShot = elapsed
+            fireSaucerShot(from: enemy.node.position)
+            ArcadeAudio.shared.play(.saucer)
+        }
+        if enemy.remaining <= 0 || enemy.node.position.x < -65 ||
+           enemy.node.position.x > size.width + 65 {
+            enemy.node.removeFromParent()
+            saucer = nil
+            lastSaucer = elapsed
+            nextSaucerDelay = CGFloat.random(in: difficulty.saucerDelay)
+        } else {
+            saucer = enemy
+        }
+    }
+
+    private func spawnSaucer() {
+        let fromLeft = Bool.random()
+        let direction: CGFloat = fromLeft ? 1 : -1
+        let node = ArcadeEffects.saucer(modern: modern)
+        node.position = CGPoint(x: fromLeft ? -40 : size.width + 40,
+                                y: CGFloat.random(in: (size.height * 0.25)...(size.height * 0.85)))
+        addChild(node)
+        let speed = CGFloat.random(in: 72...108) * difficulty.speedMultiplier
+        saucer = Saucer(node: node, velocity: CGVector(dx: direction * speed, dy: 0),
+                        remaining: (size.width + 120) / speed + 1)
+        lastSaucerShot = elapsed
+    }
+
+    private func fireSaucerShot(from origin: CGPoint) {
+        let aim = atan2(ship.position.y - origin.y, ship.position.x - origin.x)
+        let spread = CGFloat.random(in: difficulty == .easy ? -0.65...0.65 : difficulty == .hard ? -0.09...0.09 : -0.33...0.33)
+        let angle = aim + spread
+        let speed: CGFloat = difficulty == .hard ? 240 : difficulty == .medium ? 195 : 160
+        let bullet = SKShapeNode(circleOfRadius: 3)
+        bullet.position = origin
+        bullet.fillColor = modern ? .systemPink : .white
+        bullet.strokeColor = .clear
+        bullet.glowWidth = modern ? 6 : 0
+        bullet.zPosition = 4
+        addChild(bullet)
+        enemyShots.append(EnemyShot(node: bullet,
+                                    velocity: CGVector(dx: cos(angle) * speed,
+                                                       dy: sin(angle) * speed),
+                                    remaining: 2.7))
+    }
+
+    private func updateEnemyShots(_ dt: CGFloat) {
+        for i in enemyShots.indices.reversed() {
+            enemyShots[i].remaining -= dt
+            enemyShots[i].node.position = wrapped(
+                CGPoint(x: enemyShots[i].node.position.x + enemyShots[i].velocity.dx * dt,
+                        y: enemyShots[i].node.position.y + enemyShots[i].velocity.dy * dt),
+                margin: 0)
+            if enemyShots[i].remaining <= 0 {
+                enemyShots.remove(at: i).node.removeFromParent()
+            }
+        }
+    }
+
+    private func destroySaucer() {
+        guard let enemy = saucer else { return }
+        let position = enemy.node.position
+        enemy.node.removeFromParent()
+        saucer = nil
+        lastSaucer = elapsed
+        nextSaucerDelay = CGFloat.random(in: difficulty.saucerDelay)
+        award(200)
+        ArcadeAudio.shared.play(.saucer)
+        if modern {
+            ModernVisuals.burst(in: self, at: position, color: .systemPink, count: 20)
+            ModernVisuals.floatScore("+200", in: self, at: position)
+        }
+    }
+
+    private func saveFinalScore() {
+        guard !scoreRecorded else { return }
+        scoreRecorded = true
+        guard score > 0 else { return }
+        let key = "vectorDriftScores.\(difficulty.rawValue)"
+        var scores = UserDefaults.standard.array(forKey: key) as? [Int] ?? []
+        scores.append(score)
+        scores.sort(by: >)
+        UserDefaults.standard.set(Array(scores.prefix(5)), forKey: key)
     }
 
     private func wrapped(_ p: CGPoint, margin: CGFloat) -> CGPoint {
