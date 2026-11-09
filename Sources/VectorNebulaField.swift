@@ -120,10 +120,12 @@ final class VectorNebulaField: SKNode {
         let height = sceneSize.height
         for layer in layers {
             if layer.tiled {
-                let offsetX = (travel.dx * layer.perspective)
-                    .truncatingRemainder(dividingBy: width)
-                let offsetY = (travel.dy * layer.perspective)
-                    .truncatingRemainder(dividingBy: height)
+                let rawX = travel.dx * layer.perspective
+                let rawY = travel.dy * layer.perspective
+                // Normalize tile offsets to [-size, 0). Four adjacent tiles
+                // now cover the entire viewport for any traveled distance.
+                let offsetX = rawX - floor(rawX / width) * width - width
+                let offsetY = rawY - floor(rawY / height) * height - height
                 for (tile, coordinate) in zip(layer.tiles, layer.gridOffsets) {
                     tile.position = CGPoint(x: width * (0.5 + coordinate.x) + offsetX,
                                             y: height * (0.5 + coordinate.y) + offsetY)
@@ -225,9 +227,8 @@ final class VectorNebulaField: SKNode {
         var gridOffsets: [CGPoint] = []
 
         let coordinates: [CGPoint] = tiled
-            ? (-1...1).flatMap { x in
-                (-1...1).map { y in CGPoint(x: CGFloat(x), y: CGFloat(y)) }
-              }
+            ? [CGPoint(x: 0, y: 0), CGPoint(x: 1, y: 0),
+               CGPoint(x: 0, y: 1), CGPoint(x: 1, y: 1)]
             : [CGPoint.zero]
 
         for coordinate in coordinates {
