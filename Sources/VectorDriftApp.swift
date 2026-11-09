@@ -507,7 +507,7 @@ final class DriftScene: SKScene {
     private var shieldEnergy: CGFloat = 0
     private var shieldRechargeRemaining: CGFloat = 0
     private let shieldNode = ArcadeEffects.shield()
-    private var backgroundLayer: ModernSpaceBackdrop?
+    private var backgroundLayer: ModernCinematicSky?
     private var lastBeltSpawn: CGFloat = 0
     private let modernShipDetail = ModernVisuals.shipDetail()
     private let flame = ModernVisuals.engineFlame()
@@ -745,7 +745,8 @@ final class DriftScene: SKScene {
         updateBlackHole(dt)
         if modern {
             let density = beltDensity(at: elapsed)
-            backgroundLayer?.animate(time: elapsed, density: density)
+            backgroundLayer?.animate(time: elapsed, density: density,
+                                     shipVelocity: velocity, thrusting: thrusting)
             updateBeltTraffic(density: density)
         }
         for i in boulders.indices {
@@ -986,6 +987,7 @@ final class DriftScene: SKScene {
                                 y: .random(in: 40...max(41, size.height - 40)))
         velocity = .zero
         protectedUntil = elapsed + 1.4
+        if modern { backgroundLayer?.warpBurst() }
     }
 
     /// Asteroid belts are patchy. Built-in Modern games move through
@@ -1240,10 +1242,11 @@ final class DriftScene: SKScene {
         backgroundLayer?.removeFromParent()
         backgroundLayer = nil
         if modern {
-            let layer = ModernSpaceBackdrop(size: size)
+            let layer = ModernCinematicSky(size: size)
             addChild(layer)
             backgroundLayer = layer
-            layer.animate(time: elapsed, density: beltDensity(at: elapsed))
+            layer.animate(time: elapsed, density: beltDensity(at: elapsed),
+                          shipVelocity: velocity, thrusting: false)
             layer.lens(at: blackHole?.node.position)
         } else {
             // Comets and shockwaves remain in Classic on Hard difficulty.
