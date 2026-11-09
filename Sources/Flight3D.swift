@@ -560,12 +560,12 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
         body.firstMaterial = material
         let node = SCNNode(geometry: body)
         let heading = forward()
-        node.position = add(ship.position, multiply(heading, 3.7))
+        node.position = add(ship.position, multiply(heading, 5.2))
         node.eulerAngles = ship.eulerAngles
         scene.rootNode.addChildNode(node)
         nuclearMissile = NuclearMissile3D(node: node,
-            velocity: add(multiply(shipVelocity, 0.35), multiply(heading, 42)),
-            fuse: 2.1)
+            velocity: add(multiply(shipVelocity, 0.65), multiply(heading, 90)),
+            fuse: 2.5)
         if soundEnabled { ArcadeAudio.shared.play(.fire) }
     }
 
@@ -574,7 +574,7 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
         missile.fuse -= dt
         missile.node.position = moveAtEdge(add(missile.node.position,
                                              multiply(missile.velocity, dt)), velocity: &missile.velocity)
-        missile.velocity = multiply(missile.velocity, max(0, 1 - dt * 0.65))
+        missile.velocity = multiply(missile.velocity, max(0, 1 - dt * 0.12))
         if missile.fuse > 0 {
             nuclearMissile = missile
             return
@@ -598,6 +598,21 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
                     .fadeOut(duration: 0.65)]),
             .removeFromParentNode()
         ]))
+        // Unsafe close-range detonations destroy the player even with shield
+        // or temporary respawn protection. Do not double-apply a normal hit.
+        if length(subtract(ship.position, point)) < 19 && !gameOver {
+            lives -= 1
+            invulnerableUntil = elapsed + 2
+            if soundEnabled { ArcadeAudio.shared.play(.ship) }
+            ship.position = SCNVector3Zero
+            shipVelocity = SCNVector3Zero
+            shieldActive = false
+            shield.isHidden = true
+            if lives <= 0 {
+                gameOver = true
+                message = "NUCLEAR BLAST — GAME OVER"
+            }
+        }
         for index in rocks.indices.reversed() {
             let rock = rocks[index]
             guard length(subtract(rock.node.position, point)) < blastRadius + radius(for: rock.level) else { continue }
@@ -717,6 +732,7 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
     private func split(at index: Int, awardPoints: Bool) {
         let rock = rocks.remove(at: index)
         rock.node.removeFromParentNode()
+        if soundEnabled { ArcadeAudio.shared.playRockBreak(level: rock.level) }
         if awardPoints { score += 20 * (6 - rock.level) }
         guard rock.level > 1 else { return }
         for side in [-1.0, 1.0] as [CGFloat] {
