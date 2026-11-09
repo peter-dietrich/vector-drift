@@ -692,6 +692,7 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
         shield.isHidden = !shieldActive
         lastShot = elapsed - CGFloat(data.lastShotAgo)
         ammo = data.ammoReserve ?? AmmoReserve()
+        ammo.normalize()
         missilesRemaining = data.missilesRemaining
         lastBlackHole = elapsed - CGFloat(data.lastBlackHoleAgo)
         nextBlackHoleDelay = CGFloat(data.nextBlackHoleDelay)
