@@ -32,6 +32,12 @@ A GitHub Actions macOS build runs on pushes to `main` and pull requests. This is
 
 Click inside the playfield for keyboard focus. In **3D Flight**, left/right arrows yaw, **I/K** pitch, **Q/E** roll, **W/X** rise/dive, **A/D** strafe; Up thrusts forward and Down reverses. Space fires, S shields and N launches a missile.
 
+## v0.11.1 — Rock-impact and glass telemetry refinement
+
+- **Dry rock sounds:** the old pitched two-tone fracture is replaced with several time-shaped filtered-noise bands: a brief brittle snap, low-mid impact, rough crumbling debris, and a quieter second crack. Small, medium and large rocks use different durations and body emphasis. Nonfatal rock hits now use a short noise crack too. The intent is stone breaking apart, not metallic resonance; sound character should be judged with speakers or headphones.
+- **Less intrusive glass HUD:** the two top telemetry surfaces are now approximately 304 × 76 points (previously 344 × 98), with a blue-black glass tint at roughly 12% opacity and a thin understated border. Amber rails and labels are softer. Main score and lives/nuke values are 18–19 pt, while headings are 8.5 pt and secondary information is 9 pt.
+- **Tighter center status:** pause/title/game-over panels are approximately 398 × 108 points (previously 476 × 134), translucent rather than opaque, with a 35 pt headline and smaller supporting labels. Classic receives analogous restrained treatment.
+
 ## v0.11 — Safer nuclear launch, rocky breakups, telemetry HUD
 
 - **Nuke launch tuning:** the 2D missile launches 35 points beyond the ship and travels about 295 points/second (plus 65% of the ship's own velocity), with a 2.0-second fuse and far less drag. Its large-area blast still clears nearby rocks and enemies, but a ship within the inner lethal zone (up to 180 points) is destroyed even with an active shield. It uses the same respawn/game-over behavior as a collision. The 3D missile travels 90 depth-units/second, uses a 2.5-second fuse, and kills a ship within 19 spatial units.
