@@ -32,11 +32,19 @@ A GitHub Actions macOS build runs on pushes to `main` and pull requests. This is
 
 Click inside the playfield for keyboard focus. In **3D Flight**, left/right arrows yaw, **I/K** pitch, **Q/E** roll, **W/X** rise/dive, **A/D** strafe; Up thrusts forward and Down reverses. Space fires, S shields and N launches a missile.
 
+## v0.14.1 — 500 rounds and reliable Modern background lifecycle
+
+- Ammunition capacity is now **500** rather than 1,000 rounds for Classic, Modern and 3D Flight. The five-second recharge delay and refill speed of 100 rounds per second are unchanged. New-game ammo is full; older save slots with more than 500 rounds are safely clamped during restore.
+- HUD displays `ROUNDS 500 / 500` on a full magazine.
+- Modern's vector nebula is initialized on the title screen, kept in memory when changing Classic/Modern/3D Flight, and reattached if SwiftUI recreates the macOS SpriteKit view. A new game and each new wave still regenerate the randomized sky.
+- The original vector nebula textures now use **direct SpriteKit texture drawing**, with sprite parallax, soft scale breathing, subtle rotation, and alpha modulation. This avoids a fragile fullscreen shader rendering path that could show a white/empty playfield on some Macs. Black-hole gameplay and its animated accretion disk remain unchanged, but shader-driven background gravitational refraction is temporarily disabled until it can be tested separately on Macs.
+- Testing: launch with Modern selected and verify the title screen has a starfield; change Classic → Modern → 3D Flight → Modern; then start a new game and verify stars/nebula stay visible.
+
 ## v0.14 — Compact right-aligned telemetry and regenerative ammunition
 
 - **Right-side telemetry is about 15% smaller:** narrower translucent panel, shorter vertical footprint and smaller font rendering, with every metric and heading right-aligned to a common edge.
-- **Ammo reserve:** start each new game with 1,000 rounds. Each Space-key projectile consumes one round. Existing custom `Max Bullets` rules still control simultaneous projectiles and are independent of magazine size.
-- **Self-recharging:** after five seconds without firing, ammunition automatically refills at 100 rounds per second, stopping at 1,000. Shooting interrupts the refill and resets the five-second idle timer. Holding the Space key while out of ammo does not replenish the magazine.
+- **Ammo reserve:** start each new game with 500 rounds. Each Space-key projectile consumes one round. Existing custom `Max Bullets` rules still control simultaneous projectiles and are independent of magazine size.
+- **Self-recharging:** after five seconds without firing, ammunition automatically refills at 100 rounds per second, stopping at 500. Shooting interrupts the refill and resets the five-second idle timer. Holding the Space key while out of ammo does not replenish the magazine.
 - **Telemetry:** rounds remaining and capacity, with a countdown during the five-second delay and a refilling/full indicator.
 - **All modes:** ammunition applies to Classic, Modern and 3D Flight; the vertical ammo readout is displayed in Classic and Modern 2D. 3D Flight's separate HUD has not yet received the same layout.
 - **Save/Resume:** ammo quantity and partial refill progress are preserved in 2D and 3D checkpoints. Older saves without ammo data continue loading and receive a full magazine.
