@@ -483,35 +483,78 @@ final class VectorNebulaField: SKNode {
         return sqrt(-2 * log(a)) * cos(2 * CGFloat.pi * b)
     }
 
+    /// Sparse illuminated gas fronts, connected to the same serpentine ridge
+    /// used to place the cloud banks. No random squiggles across empty space.
+    /// Small side branches and double strokes suggest charged cloud edges.
     private func makeFilaments() -> SKTexture {
-        guard let ctx=makeCanvas(scale:0.85) else { return makeTexture(nil) }
-        let w=sceneSize.width,h=sceneSize.height
-        for index in 0..<83 {
-            let x=CGFloat.random(in:-60...(w+60))
-            let ridge=h*(0.42+0.16*sin(x/w*6.2+0.7))
-            let y=ridge+CGFloat.random(in:-h*0.14...h*0.14)
-            let path=CGMutablePath()
-            path.move(to:CGPoint(x:x,y:y))
-            let span=CGFloat.random(in:40...220)
-            let amplitude=CGFloat.random(in:12...52)
-            let dir=Bool.random() ? CGFloat(1) : -1
-            for k in 1...5 {
-                let fx=x+span*CGFloat(k)/5*dir
-                let fy=y+sin(CGFloat(k)*1.22+CGFloat(index))*amplitude
-                path.addQuadCurve(to:CGPoint(x:fx,y:fy),
-                    control:CGPoint(x:fx-span/12*dir,
-                                    y:fy+cos(CGFloat(k)*1.39)*amplitude))
-            }
-            let orange=index.isMultiple(of:3)
-            ctx.addPath(path)
-            ctx.setStrokeColor(CGColor(red:orange ? 0.94 : 0.38,
-                                       green:orange ? 0.54 : 0.76,
-                                       blue:orange ? 0.25 : 0.98,
-                                       alpha:CGFloat.random(in:0.09...0.30)))
-            ctx.setLineWidth(CGFloat.random(in:0.65...1.7))
-            ctx.strokePath()
+        guard let ctx = makeCanvas(scale: 0.85) else { return makeTexture(nil) }
+        let width = sceneSize.width, height = sceneSize.height
+        let fronts = 23
+
+        func ridge(_ x: CGFloat) -> CGFloat {
+            height * (0.42 + 0.16 * sin(x / width * 6.2 + 0.7))
         }
-        return makeTexture(ctx)
+
+        for index in 0..<fronts {
+            let startX = (CGFloat(index) + CGFloat.random(in: -0.24...0.24)) /
+                CGFloat(fronts) * width
+            let offset = CGFloat.random(in: -height * 0.055...height * 0.055)
+            let span = CGFloat.random(in: 48...125)
+            let from = CGPoint(x: startX, y: ridge(startX) + offset)
+
+            // Each filament hugs an existing gas front with local irregularity
+            // and only travels partway across its supporting cloud mass.
+            let endX = startX + span
+            let end = CGPoint(x: endX,
+                              y: ridge(endX) + offset * 0.58 +
+                                 CGFloat.random(in: -13...13))
+            let midpointX = startX + span * 0.52
+            let midpoint = CGPoint(x: midpointX,
+                                   y: ridge(midpointX) + offset * 0.8 +
+                                      CGFloat.random(in: -9...9))
+            let curve = CGMutablePath()
+            curve.move(to: from)
+            curve.addQuadCurve(to: midpoint,
+                control: CGPoint(x: startX + span * 0.24,
+                                 y: ridge(startX + span * 0.24) + offset))
+            curve.addQuadCurve(to: end,
+                control: CGPoint(x: startX + span * 0.78,
+                                 y: ridge(startX + span * 0.78) + offset * 0.62))
+
+            let amber = index.isMultiple(of: 3)
+            let red: CGFloat = amber ? 0.94 : 0.39
+            let green: CGFloat = amber ? 0.57 : 0.82
+            let blue: CGFloat = amber ? 0.27 : 0.98
+
+            // A broad translucent rim with a much narrower, dimmer highlight.
+            for (width, alpha) in [(CGFloat(5.0), CGFloat(0.035)),
+                                   (CGFloat(1.15), CGFloat(0.20))] {
+                ctx.addPath(curve)
+                ctx.setStrokeColor(CGColor(red: red, green: green, blue: blue,
+                                           alpha: alpha))
+                ctx.setLineWidth(width)
+                ctx.setLineCap(.round)
+                ctx.strokePath()
+            }
+
+            // Only some fronts have short tributary filaments; these peel away
+            // from the gas wall instead of forming an unrelated sine-wave field.
+            if index.isMultiple(of: 4) {
+                let branch = CGMutablePath()
+                branch.move(to: midpoint)
+                branch.addQuadCurve(
+                    to: CGPoint(x: midpoint.x + span * 0.27,
+                                y: midpoint.y + CGFloat.random(in: 12...33)),
+                    control: CGPoint(x: midpoint.x + span * 0.12,
+                                     y: midpoint.y + 18))
+                ctx.addPath(branch)
+                ctx.setStrokeColor(CGColor(red: red, green: green, blue: blue,
+                                           alpha: 0.12))
+                ctx.setLineWidth(0.8)
+                ctx.strokePath()
+            }
+        }
+        return makeTexture(ctx, blur: 1.15)
     }
 
     private func makeDust() -> SKTexture {
