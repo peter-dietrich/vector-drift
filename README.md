@@ -32,6 +32,14 @@ A GitHub Actions macOS build runs on pushes to `main` and pull requests. This is
 
 Click inside the playfield for keyboard focus. In **3D Flight**, left/right arrows yaw, **I/K** pitch, **Q/E** roll, **W/X** rise/dive, **A/D** strafe; Up thrusts forward and Down reverses. Space fires, S shields and N launches a missile.
 
+## v0.9.1 — Seamless nebula field (fix for floating photo panels)
+
+The prior v0.9 experiment displayed three independent rectangular photograph sprites. Those overlapping panels and their edges were visible in gameplay, defeating the cinematic effect. This is now replaced by **one fixed, full-viewport canvas** with a GPU shader that samples two NASA photo textures, continuously warps the sampled coordinates, and blends the second image only inside slowly evolving, irregular cloud masks.
+
+There are no rotated photo panels or hard rectangular overlay boundaries. Motion remains inside the shader, so the sky is stationary relative to the game viewport while nebula clouds swirl, change shape and softly drift. Thrust shifts photo sampling slightly; hyperspace adds a brief radial acceleration effect; black-hole lensing refracts both images together. The canvas resizes with the window.
+
+The procedural fallback still appears while the first photo downloads or when offline. Astrophoto textures are cached between launches. The blend is intentionally dark enough for gameplay readability; this change still needs a visual test on your Mac, since GitHub Actions only verifies Swift compilation.
+
 ## v0.9 — Cinematic telescope-photo backgrounds
 
 Modern (2D) now uses real, layered raster astrophotography instead of primarily drawing the backdrop from procedural dots and vector glows. The two source plates are:
