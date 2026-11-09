@@ -655,8 +655,9 @@ final class DriftScene: SKScene {
         message.fontSize = 35
         message.horizontalAlignmentMode = .center
         addChild(message)
-        leftHeading.horizontalAlignmentMode = .left
-        leftFootnote.horizontalAlignmentMode = .left
+        // All telemetry labels use the same right-aligned baseline.
+        leftHeading.horizontalAlignmentMode = .right
+        leftFootnote.horizontalAlignmentMode = .right
         rightHeading.horizontalAlignmentMode = .right
         rightFootnote.horizontalAlignmentMode = .right
         stageHeading.horizontalAlignmentMode = .center
@@ -666,22 +667,24 @@ final class DriftScene: SKScene {
 
     override func didChangeSize(_ oldSize: CGSize) {
         backgroundLayer?.resize(to: size)
+        // 15% smaller than the preceding right column; extra ammunition
+        // readouts fit by tightening vertical spacing, not enlarging the glass.
         let inset: CGFloat = 14
-        let columnWidth: CGFloat = min(252, max(196, size.width * 0.235))
-        let layoutScale = min(CGFloat(1), max(CGFloat(0.72), (size.height - 32) / 440))
-        let columnHeight: CGFloat = 418 * layoutScale
+        let columnWidth: CGFloat = min(214, max(178, size.width * 0.20))
+        let layoutScale: CGFloat = min(0.85, max(0.61, (size.height - 30) / 480))
+        let columnHeight: CGFloat = 412 * layoutScale
         let topY = size.height - 15
         let leftX = size.width - inset - columnWidth
-        let textX = leftX + 17
+        let textX = size.width - inset - 13
         rightPanel.path = CGPath(roundedRect: CGRect(
             x: -columnWidth / 2, y: -columnHeight / 2,
             width: columnWidth, height: columnHeight),
-            cornerWidth: 8, cornerHeight: 8, transform: nil)
+            cornerWidth: 7, cornerHeight: 7, transform: nil)
         rightPanel.position = CGPoint(x: leftX + columnWidth / 2,
                                       y: topY - columnHeight / 2)
         rightAccent.path = CGPath(rect: CGRect(
-            x: -1, y: -(columnHeight - 22) / 2,
-            width: 2, height: columnHeight - 22), transform: nil)
+            x: -1, y: -(columnHeight - 21) / 2,
+            width: 2, height: columnHeight - 21), transform: nil)
         rightAccent.position = CGPoint(x: leftX + 5,
                                        y: topY - columnHeight / 2)
 
@@ -689,24 +692,25 @@ final class DriftScene: SKScene {
             label.position = CGPoint(x: textX, y: topY - offset * layoutScale)
             label.setScale(layoutScale)
         }
-        put(leftHeading, 19)
-        put(scoreCaption, 54)
-        put(hud, 69)
-        put(leftFootnote, 112)
-        put(waveCaption, 157)
-        put(waveValue, 172)
-        put(beltCaption, 230)
-        put(beltValue, 246)
-        put(rightHeading, 307)
-        put(statusHUD, 328)
-        put(rightFootnote, 361)
-        put(difficultyReadout, 391)
-        for (rule, offset) in [(telemetryRuleOne, CGFloat(140)),
-                               (telemetryRuleTwo, CGFloat(289))] {
+        put(leftHeading, 16)
+        put(scoreCaption, 47)
+        put(hud, 61)
+        put(leftFootnote, 101)
+        put(waveCaption, 136)
+        put(waveValue, 148)
+        put(beltCaption, 200)
+        put(beltValue, 214)
+        put(rightHeading, 269)
+        put(statusHUD, 285)
+        put(rightFootnote, 316)
+        put(difficultyReadout, 341)
+        put(ammoReadout, 365)
+        put(ammoStatus, 388)
+        for (rule, offset) in [(telemetryRuleOne, CGFloat(119)),
+                               (telemetryRuleTwo, CGFloat(249))] {
             rule.path = CGPath(rect: CGRect(
-                x: 0, y: 0, width: columnWidth - 34, height: 0.7), transform: nil)
-            rule.position = CGPoint(x: textX, y: topY - offset * layoutScale)
-            rule.xScale = 1
+                x: 0, y: 0, width: columnWidth - 27, height: 0.6), transform: nil)
+            rule.position = CGPoint(x: leftX + 14, y: topY - offset * layoutScale)
         }
         message.position = CGPoint(x: size.width / 2, y: size.height / 2 + 1)
         stageHeading.position = CGPoint(x: size.width / 2, y: size.height / 2 + 31)
