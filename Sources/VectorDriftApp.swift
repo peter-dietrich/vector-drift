@@ -174,8 +174,8 @@ private struct GameWindow: View {
                         if scores.isEmpty {
                             Text("No completed runs yet").foregroundStyle(.secondary)
                         } else {
-                            ForEach(Array(scores.prefix(5).enumerated()), id: \.offset) { rank, value in
-                                Text("\(rank + 1).  \(value)").font(.system(.body, design: .monospaced))
+                            ForEach(Array(scores.prefix(5).enumerated()), id: \.offset) { entry in
+                                Text("\(entry.offset + 1).  \(entry.element)").font(.system(.body, design: .monospaced))
                             }
                         }
                     }
@@ -425,8 +425,19 @@ final class DriftScene: SKScene {
     override func update(_ currentTime: TimeInterval) {
         let dt = lastTime == 0 ? CGFloat(1.0 / 60) : CGFloat(min(max(currentTime - lastTime, 0), 1.0 / 30))
         lastTime = currentTime
-        guard ready && !over && !stopped else { return }
+        guard ready && !over && !stopped && !titleVisible else { return }
         elapsed += dt
+        if shieldActive {
+            shieldEnergy = max(0, shieldEnergy - dt)
+            if shieldEnergy == 0 {
+                shieldActive = false
+                shieldNode.isHidden = true
+            }
+        }
+        ArcadeEffects.updateShield(shieldNode, modern: modern,
+                                   remaining: shieldActive ? shieldEnergy : 0,
+                                   total: difficulty.shieldDuration)
+        updateHud()
 
         if held.contains(123) { heading += 3.7 * dt }
         if held.contains(124) { heading -= 3.7 * dt }
@@ -446,6 +457,7 @@ final class DriftScene: SKScene {
 
         if held.contains(49) && elapsed - lastFire > difficulty.shootCooldown && lasers.count < 6 {
             lastFire = elapsed
+            ArcadeAudio.shared.play(.fire)
             let bullet = SKShapeNode(circleOfRadius: 2)
             bullet.position = CGPoint(x: ship.position.x + forward.dx * 20,
                                       y: ship.position.y + forward.dy * 20)
@@ -471,20 +483,29 @@ final class DriftScene: SKScene {
                 y: lasers[i].node.position.y + lasers[i].velocity.dy * dt), margin: 0)
         }
 
-        if modern {
+        if modern || difficulty == .hard {
             updateComet(dt)
             updateShockwaves(dt)
         }
+        updateSaucer(dt)
+        updateEnemyShots(dt)
         for i in lasers.indices.reversed() {
             if lasers[i].remaining <= 0 {
                 lasers.remove(at: i).node.removeFromParent()
                 continue
             }
-            if modern, let activeComet = comet,
+            if let activeComet = comet,
                 hypot(activeComet.node.position.x - lasers[i].node.position.x,
                       activeComet.node.position.y - lasers[i].node.position.y) < 22 {
                 lasers.remove(at: i).node.removeFromParent()
                 detonateComet(at: activeComet.node.position)
+                continue
+            }
+            if let activeSaucer = saucer,
+               hypot(activeSaucer.node.position.x - lasers[i].node.position.x,
+                     activeSaucer.node.position.y - lasers[i].node.position.y) < 26 {
+                lasers.remove(at: i).node.removeFromParent()
+                destroySaucer()
                 continue
             }
             if let j = boulders.firstIndex(where: {
@@ -492,13 +513,24 @@ final class DriftScene: SKScene {
                       $0.node.position.y - lasers[i].node.position.y) < $0.radius + 2
             }) {
                 lasers.remove(at: i).node.removeFromParent()
+                if boulders[j].hitPoints > 1 {
+                    boulders[j].hitPoints -= 1
+                    boulders[j].crack.isHidden = false
+                    boulders[j].node.lineWidth = 3
+                    boulders[j].node.strokeColor = modern ? ModernVisuals.fire : .yellow
+                    ArcadeAudio.shared.play(.rock)
+                    ModernVisuals.burst(in: self, at: lasersImpactPoint(boulders[j].node.position),
+                                        color: modern ? ModernVisuals.fire : .yellow, count: 7)
+                    continue
+                }
                 let rock = boulders.remove(at: j)
                 rock.node.removeFromParent()
+                ArcadeAudio.shared.play(.rock)
                 if modern {
                     ModernVisuals.burst(in: self, at: rock.node.position,
                                         color: ModernVisuals.ice, count: rock.level * 5)
                 }
-                award(rock.level == 3 ? 20 : rock.level == 2 ? 50 : 100)
+                award(rock.level == 4 ? 60 : rock.level == 3 ? 20 : rock.level == 2 ? 50 : 100)
                 if rock.level > 1 {
                     for direction in [-0.75, 0.75] as [CGFloat] {
                         let angle = atan2(rock.velocity.dy, rock.velocity.dx) + direction
@@ -513,18 +545,28 @@ final class DriftScene: SKScene {
             }
         }
 
-        if elapsed >= protectedUntil &&
-            !ship.isHidden && boulders.contains(where: {
+        if elapsed >= protectedUntil && !ship.isHidden && !shieldActive &&
+            (boulders.contains(where: {
                 hypot($0.node.position.x - ship.position.x,
                       $0.node.position.y - ship.position.y) < $0.radius + 11
-            }) {
+            }) || enemyShots.contains(where: {
+                hypot($0.node.position.x - ship.position.x,
+                      $0.node.position.y - ship.position.y) < 15
+            }) || (saucer.map {
+                hypot($0.node.position.x - ship.position.x,
+                      $0.node.position.y - ship.position.y) < 34
+            } ?? false)) {
             lives -= 1
+            shieldActive = false
+            shieldNode.isHidden = true
+            ArcadeAudio.shared.play(.ship)
             shipImpact()
             updateHud()
             if lives <= 0 {
                 over = true
                 ship.isHidden = true
-                message.text = "GAME OVER · PRESS R"
+                saveFinalScore()
+                message.text = "GAME OVER · PRESS RETURN"
             } else {
                 resetShip()
                 protectedUntil = elapsed + difficulty.respawnProtection
@@ -532,7 +574,11 @@ final class DriftScene: SKScene {
         }
         if boulders.isEmpty && shockwaves.isEmpty {
             wave += 1
+            shieldEnergy = difficulty.shieldDuration
+            shieldActive = false
+            shieldNode.isHidden = true
             spawnWave()
+            ArcadeAudio.shared.play(.wave)
             protectedUntil = elapsed + 1.5
             updateHud()
         }
@@ -548,6 +594,16 @@ final class DriftScene: SKScene {
     }
 
     private func spawnWave() {
+        if difficulty == .hard && wave >= 2 {
+            for _ in 0..<min(1 + (wave - 2) / 3, 3) {
+                let point = CGPoint(x: CGFloat.random(in: 80...max(81, size.width - 80)),
+                                    y: CGFloat.random(in: 80...max(81, size.height - 80)))
+                let angle = CGFloat.random(in: 0...(2 * .pi))
+                let speed = rockSpeed(for: 4)
+                spawnRock(level: 4, at: point,
+                          velocity: CGVector(dx: cos(angle) * speed, dy: sin(angle) * speed))
+            }
+        }
         for _ in 0..<min(difficulty.initialAsteroids + wave - 1, 12) {
             var point = CGPoint.zero
             for _ in 0..<30 {
@@ -567,6 +623,7 @@ final class DriftScene: SKScene {
     private func rockSpeed(for level: Int) -> CGFloat {
         let baseRange: ClosedRange<CGFloat>
         switch level {
+        case 4: baseRange = 20...38
         case 3: baseRange = 36...68
         case 2: baseRange = 85...118
         default: baseRange = 138...190
@@ -576,10 +633,10 @@ final class DriftScene: SKScene {
     }
 
     private func spawnRock(level: Int, at point: CGPoint, velocity: CGVector) {
-        let radius: CGFloat = level == 3 ? 43 : level == 2 ? 27 : 15
+        let radius: CGFloat = level == 4 ? 68 : level == 3 ? 43 : level == 2 ? 27 : 15
         let path = CGMutablePath()
         var points: [CGPoint] = []
-        let vertices = 12
+        let vertices = level == 4 ? 17 : 12
         for i in 0..<vertices {
             let angle = 2 * CGFloat.pi * CGFloat(i) / CGFloat(vertices)
             let radiusVariation = CGFloat.random(in: 0.7...1.14)
@@ -595,15 +652,18 @@ final class DriftScene: SKScene {
         node.lineWidth = 1.7
         let detail = ModernVisuals.asteroidDetail(radius: radius, vertices: points)
         node.addChild(detail)
+        let crack = ArcadeEffects.damageCrack(radius: radius)
+        node.addChild(crack)
         addChild(node)
         boulders.append(Boulder(node: node, velocity: velocity, radius: radius,
-                                level: level, spin: .random(in: -1.2...1.2), detail: detail))
+                                level: level, spin: .random(in: -1.2...1.2), detail: detail,
+                                hitPoints: level == 4 ? 2 : 1, crack: crack))
         styleRock(node, detail: detail)
     }
 
     private func updateHud() {
-        hud.text = String(format: "SCORE %06d   HIGH %06d   WAVE %d   LIVES %d   %@",
-                          score, high, wave, lives, difficulty.title.uppercased())
+        hud.text = String(format: "SCORE %06d   HIGH %06d   WAVE %d   LIVES %d   %@   SHIELD %.1fs",
+                          score, high, wave, lives, difficulty.title.uppercased(), shieldEnergy)
     }
 
     private func updateStyle() {
@@ -616,7 +676,19 @@ final class DriftScene: SKScene {
         ship.glowWidth = modern ? 5 : 0
         hud.fontColor = color
         message.fontColor = color
-        for rock in boulders { styleRock(rock.node, detail: rock.detail) }
+        for rock in boulders {
+            styleRock(rock.node, detail: rock.detail)
+            if !rock.crack.isHidden {
+                rock.crack.strokeColor = modern ? ModernVisuals.fire : .yellow
+            }
+        }
+        ArcadeEffects.updateShield(shieldNode, modern: modern,
+                                   remaining: shieldActive ? shieldEnergy : 0,
+                                   total: difficulty.shieldDuration)
+        if let saucer {
+            saucer.node.strokeColor = modern ? .systemPink : .white
+            saucer.node.glowWidth = modern ? 8 : 0
+        }
         modernShipDetail.isHidden = !modern
         flame.isHidden = true
         backgroundLayer?.removeFromParent()
@@ -626,7 +698,11 @@ final class DriftScene: SKScene {
             addChild(layer)
             backgroundLayer = layer
         } else {
-            clearSpecialEffects()
+            // Comets and shockwaves remain in Classic on Hard difficulty.
+            if difficulty != .hard {
+                comet?.node.removeFromParent()
+                comet = nil
+            }
         }
         for laser in lasers {
             laser.node.fillColor = modern ? .yellow : .white
@@ -729,8 +805,10 @@ final class DriftScene: SKScene {
 
         if elapsed >= nextSpark {
             nextSpark = elapsed + 0.075
-            ModernVisuals.cometSpark(in: self, at: active.node.position,
-                                     direction: active.velocity)
+            if modern {
+                ModernVisuals.cometSpark(in: self, at: active.node.position,
+                                         direction: active.velocity)
+            }
         }
 
         if active.remaining <= 0 ||
@@ -739,7 +817,7 @@ final class DriftScene: SKScene {
             active.node.removeFromParent()
             comet = nil
             lastComet = elapsed
-            nextCometDelay = CGFloat.random(in: 14...23)
+            nextCometDelay = CGFloat.random(in: difficulty.cometDelay)
         } else {
             comet = active
         }
@@ -748,7 +826,7 @@ final class DriftScene: SKScene {
     private func spawnComet() {
         let fromLeft = Bool.random()
         let direction: CGFloat = fromLeft ? 1 : -1
-        let node = ModernVisuals.cometNode()
+        let node = modern ? ModernVisuals.cometNode() : ArcadeEffects.classicComet()
         node.position = CGPoint(
             x: fromLeft ? -45 : size.width + 45,
             y: CGFloat.random(in: (size.height * 0.16)...(size.height * 0.84))
@@ -765,13 +843,20 @@ final class DriftScene: SKScene {
         comet?.node.removeFromParent()
         comet = nil
         lastComet = elapsed
-        nextCometDelay = CGFloat.random(in: 17...27)
+        nextCometDelay = CGFloat.random(in: difficulty.cometDelay)
 
         award(750)
-        ModernVisuals.floatScore("COMET +750", in: self, at: point)
-        ModernVisuals.burst(in: self, at: point, color: ModernVisuals.fire, count: 42)
+        ArcadeAudio.shared.play(.comet)
+        if modern {
+            ModernVisuals.floatScore("COMET +750", in: self, at: point)
+            ModernVisuals.burst(in: self, at: point, color: ModernVisuals.fire, count: 42)
+        }
 
         let ring = ModernVisuals.shockRing(at: point)
+        if !modern {
+            ring.strokeColor = .white
+            ring.glowWidth = 0
+        }
         addChild(ring)
         shockwaves.append(Shockwave(center: point, elapsed: 0,
                                     ring: ring, hit: Set<ObjectIdentifier>()))
@@ -796,8 +881,10 @@ final class DriftScene: SKScene {
                 let removed = boulders.remove(at: j)
                 removed.node.removeFromParent()
                 award(removed.level == 3 ? 40 : removed.level == 2 ? 100 : 200)
-                ModernVisuals.burst(in: self, at: removed.node.position,
-                                    color: ModernVisuals.ice, count: 11)
+                if modern {
+                    ModernVisuals.burst(in: self, at: removed.node.position,
+                                        color: ModernVisuals.ice, count: 11)
+                }
             }
 
             if progress >= 1 {
