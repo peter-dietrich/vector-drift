@@ -21,6 +21,9 @@ final class VectorNebulaField: SKNode {
         let morph: SKUniform
         let warp: SKUniform
         let aspect: SKUniform
+        let wrap: SKUniform
+        let direction: SKUniform
+        let streak: SKUniform
         let perspective: CGFloat
         let baseOpacity: CGFloat
         let phase: CGFloat
@@ -29,7 +32,9 @@ final class VectorNebulaField: SKNode {
     private(set) var sceneSize: CGSize
     private var layers: [AnimatedLayer] = []
     private var lastTime: CGFloat?
-    private var parallax = CGVector.zero
+    /// Integrated ship travel in world points. Unlike an eased offset, this
+    /// keeps accumulating while the ship is coasting, so depth is observable.
+    private var travel = CGVector.zero
     private var warpEnergy: CGFloat = 0
     private var lensLocation: CGPoint?
     private var lensIntensity: CGFloat = 0
@@ -69,22 +74,42 @@ final class VectorNebulaField: SKNode {
         warpEnergy = max(0, warpEnergy - dt * 1.1)
         currentDensity = max(0, min(1, density))
 
-        let strength: CGFloat = thrusting ? 0.027 : 0.012
-        parallax.dx = max(-38, min(38,
-            parallax.dx * 0.995 - shipVelocity.dx * dt * strength))
-        parallax.dy = max(-30, min(30,
-            parallax.dy * 0.995 - shipVelocity.dy * dt * strength))
+        // Translate an actual traveled distance into an apparent camera
+        // movement. Motion continues during inertia, not only while Up is held.
+        // Wrap periodic star/dust layers instead of clamping after ~30 px.
+        travel.dx -= shipVelocity.dx * dt * 0.82
+        travel.dy -= shipVelocity.dy * dt * 0.82
+        let speed = hypot(shipVelocity.dx, shipVelocity.dy)
+        let speedRatio = min(1, speed / 330)
+        let normX = speed > 1 ? shipVelocity.dx / speed : 0
+        let normY = speed > 1 ? shipVelocity.dy / speed : 0
 
         for (index, layer) in layers.enumerated() {
             let phase = layer.phase
-            let motionX = (parallax.dx * layer.perspective) / sceneSize.width
-            let motionY = (parallax.dy * layer.perspective) / sceneSize.height
+            let periodic = index == 0 || index == 5
+            let motionX: CGFloat
+            let motionY: CGFloat
+            if periodic {
+                // Stars and sparse dust can scroll perpetually in both axes.
+                motionX = (travel.dx / sceneSize.width) * layer.perspective
+                motionY = (travel.dy / sceneSize.height) * layer.perspective
+            } else {
+                // Cloud banks are finite structures. Let them shift markedly
+                // (~25-100 px), but reverse gently before revealing an edge.
+                motionX = sin(travel.dx / (sceneSize.width * 0.28)) *
+                          0.18 * layer.perspective
+                motionY = sin(travel.dy / (sceneSize.height * 0.31)) *
+                          0.16 * layer.perspective
+            }
             layer.time.floatValue = Float(time * (0.68 + CGFloat(index) * 0.07) + phase)
             layer.drift.vectorFloat2Value = vector_float2(
                 Float(motionX), Float(motionY))
+            layer.direction.vectorFloat2Value = vector_float2(Float(normX), Float(normY))
+            layer.streak.floatValue = Float(periodic ? speedRatio *
+                (thrusting ? 0.85 : 0.45) : 0)
             layer.warp.floatValue = Float(warpEnergy *
                 (0.34 + layer.perspective * 0.43))
-            let breath = 0.92 + 0.08 * sin(time * 0.14 + phase)
+            let breath = 0.94 + 0.06 * sin(time * 0.14 + phase)
             let beltBoost: CGFloat = index == 5 ? 0.5 + currentDensity * 0.65 : 1
             layer.sprite.alpha = layer.baseOpacity * breath * beltBoost
         }
@@ -113,17 +138,17 @@ final class VectorNebulaField: SKNode {
 
     private func createLayers() {
         addLayer(texture: makeStars(), depth: -17,
-                 opacity: 1, parallax: 0.10, morph: 0, phase: 0)
+                 opacity: 1, parallax: 0.30, morph: 0, phase: 0)
         addLayer(texture: makeClouds(tier: 0, blur: 34), depth: -16,
-                 opacity: 0.82, parallax: 0.22, morph: 0.009, phase: 1.3)
+                 opacity: 0.82, parallax: 0.29, morph: 0.009, phase: 1.3)
         addLayer(texture: makeClouds(tier: 1, blur: 17), depth: -15,
-                 opacity: 0.88, parallax: 0.40, morph: 0.016, phase: 3.7)
+                 opacity: 0.88, parallax: 0.57, morph: 0.016, phase: 3.7)
         addLayer(texture: makeClouds(tier: 2, blur: 5), depth: -14,
-                 opacity: 0.70, parallax: 0.66, morph: 0.022, phase: 5.9)
+                 opacity: 0.70, parallax: 0.90, morph: 0.022, phase: 5.9)
         addLayer(texture: makeFilaments(), depth: -13,
-                 opacity: 0.80, parallax: 0.63, morph: 0.008, phase: 2.8)
+                 opacity: 0.64, parallax: 0.86, morph: 0.008, phase: 2.8)
         addLayer(texture: makeDust(), depth: -12,
-                 opacity: 0.36, parallax: 1.0, morph: 0.003, phase: 4.5)
+                 opacity: 0.36, parallax: 1.60, morph: 0.003, phase: 4.5)
     }
 
     private func addLayer(texture: SKTexture, depth: CGFloat,
@@ -137,9 +162,13 @@ final class VectorNebulaField: SKNode {
         let warp = SKUniform(name: "u_warp", float: 0)
         let aspect = SKUniform(name: "u_aspect",
                                float: Float(sceneSize.width / sceneSize.height))
+        let wrap = SKUniform(name: "u_wrap", float: depth == -17 || depth == -12 ? 1 : 0)
+        let direction = SKUniform(name: "u_direction", vectorFloat2: vector_float2(0, 0))
+        let streak = SKUniform(name: "u_streak", float: 0)
 
         let shader = SKShader(source: Self.flowAndLensingShader)
-        shader.uniforms = [time, drift, center, lens, morphUniform, warp, aspect]
+        shader.uniforms = [time, drift, center, lens, morphUniform, warp,
+                           aspect, wrap, direction, streak]
 
         let sprite = SKSpriteNode(texture: texture, size: sceneSize)
         sprite.position = CGPoint(x: sceneSize.width / 2, y: sceneSize.height / 2)
@@ -152,7 +181,8 @@ final class VectorNebulaField: SKNode {
         layers.append(AnimatedLayer(sprite: sprite, time: time,
                                     drift: drift, center: center, lens: lens,
                                     morph: morphUniform, warp: warp,
-                                    aspect: aspect, perspective: parallax,
+                                    aspect: aspect, wrap: wrap, direction: direction,
+                                    streak: streak, perspective: parallax,
                                     baseOpacity: opacity, phase: phase))
     }
 
@@ -194,9 +224,26 @@ final class VectorNebulaField: SKNode {
         vec2 sampleUV = deformed + deflection;
 
         vec4 pixel = vec4(0.0);
-        if (sampleUV.x >= 0.0 && sampleUV.x <= 1.0 &&
-            sampleUV.y >= 0.0 && sampleUV.y <= 1.0) {
+        if (u_wrap > 0.5) {
+            // Stars/dust repeat: travel never stops at an arbitrary boundary.
+            vec2 repeatUV = fract(sampleUV);
+            pixel = texture2D(u_texture, repeatUV);
+            if (u_streak > 0.02) {
+                // Only a faint optical trail on star/dust points while moving.
+                vec2 trailUV = fract(repeatUV + u_direction * 0.004 * u_streak);
+                vec4 trail = texture2D(u_texture, trailUV);
+                pixel.rgb = max(pixel.rgb, trail.rgb * 0.44 * u_streak);
+            }
+        } else if (sampleUV.x >= 0.0 && sampleUV.x <= 1.0 &&
+                   sampleUV.y >= 0.0 && sampleUV.y <= 1.0) {
             pixel = texture2D(u_texture, sampleUV);
+            // Feather finite gas contours before the source image's boundary,
+            // preventing rectangular cutoffs when the viewpoint shifts.
+            float border = smoothstep(0.0, 0.075, sampleUV.x) *
+                           smoothstep(0.0, 0.075, sampleUV.y) *
+                           (1.0 - smoothstep(0.925, 1.0, sampleUV.x)) *
+                           (1.0 - smoothstep(0.925, 1.0, sampleUV.y));
+            pixel *= border;
         }
         gl_FragColor = pixel * v_color_mix;
     }
