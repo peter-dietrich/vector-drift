@@ -1539,7 +1539,9 @@ final class DriftScene: SKScene {
             return
         }
         blackHole = hole
-        hole.node.zRotation += dt * 0.75
+        if let artwork = hole.node as? ModernBlackHoleNode {
+            artwork.advance(dt: dt, remaining: hole.remaining)
+        }
         let center = hole.node.position
         if modern {
             backgroundLayer?.lens(at: center, intensity: min(1, hole.remaining / 1.2))
@@ -1612,34 +1614,11 @@ final class DriftScene: SKScene {
     }
 
     private func spawnBlackHole() {
-        let node = SKNode()
+        let node: SKNode = modern ? ModernBlackHoleNode() : BlackHoleArtwork.classic()
         node.position = CGPoint(
-            x: CGFloat.random(in: (size.width * 0.2)...(size.width * 0.8)),
-            y: CGFloat.random(in: (size.height * 0.2)...(size.height * 0.8)))
+            x: CGFloat.random(in: (size.width * 0.20)...(size.width * 0.80)),
+            y: CGFloat.random(in: (size.height * 0.20)...(size.height * 0.80)))
         node.zPosition = 8
-        let radius: CGFloat = modern ? 28 : 22
-        let disk = SKShapeNode(circleOfRadius: radius + 17)
-        disk.strokeColor = modern
-            ? SKColor(calibratedWhite: 0.82, alpha: 0.42) : .white
-        disk.fillColor = .clear
-        disk.lineWidth = modern ? 2.5 : 2
-        disk.glowWidth = modern ? 6 : 0
-        node.addChild(disk)
-        let ring = SKShapeNode(ellipseOf: CGSize(width: radius * 3.7, height: radius))
-        ring.strokeColor = modern
-            ? SKColor(calibratedWhite: 0.91, alpha: 0.30) : .white
-        ring.fillColor = .clear
-        ring.lineWidth = modern ? 1.6 : 2
-        ring.glowWidth = modern ? 5 : 0
-        ring.zRotation = -.pi / 5
-        node.addChild(ring)
-        let core = SKShapeNode(circleOfRadius: radius)
-        core.fillColor = .black
-        core.strokeColor = modern
-            ? SKColor(calibratedWhite: 0.72, alpha: 0.56) : .white
-        core.lineWidth = modern ? 1.4 : 1.5
-        core.glowWidth = modern ? 4 : 0
-        node.addChild(core)
         addChild(node)
         blackHole = BlackHoleEvent(node: node, remaining: 11)
         ArcadeAudio.shared.play(.comet)
