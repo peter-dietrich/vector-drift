@@ -859,22 +859,7 @@ final class DriftScene: SKScene {
                 hypot($0.node.position.x - ship.position.x,
                       $0.node.position.y - ship.position.y) < 34
             } ?? false)) {
-            lives -= 1
-            ArcadeAudio.shared.stopThrust()
-            if shieldActive { startShieldRecharge() }
-            ArcadeAudio.shared.play(.ship)
-            shipImpact()
-            updateHud()
-            if lives <= 0 {
-                over = true
-                ship.isHidden = true
-                saveFinalScore()
-                message.text = "GAME OVER  •  PRESS RETURN"
-                stagePanel.isHidden = false
-            } else {
-                resetShip()
-                protectedUntil = elapsed + difficulty.respawnProtection
-            }
+            destroyPlayerShip()
         }
         if boulders.isEmpty && shockwaves.isEmpty {
             wave += 1
@@ -887,6 +872,29 @@ final class DriftScene: SKScene {
             ArcadeAudio.shared.play(.wave)
             protectedUntil = elapsed + 1.5
             updateHud()
+        }
+    }
+
+    /// One death path handles rock collisions and nuclear splash damage.
+    /// The nuke deliberately bypasses shield and respawn protection, but
+    /// never subtracts multiple lives during the same death animation.
+    private func destroyPlayerShip() {
+        guard !over, !titleVisible, !ship.isHidden else { return }
+        lives -= 1
+        ArcadeAudio.shared.stopThrust()
+        if shieldActive { startShieldRecharge() }
+        ArcadeAudio.shared.play(.ship)
+        shipImpact()
+        updateHud()
+        if lives <= 0 {
+            over = true
+            ship.isHidden = true
+            saveFinalScore()
+            message.text = "GAME OVER  •  PRESS RETURN"
+            stagePanel.isHidden = false
+        } else {
+            resetShip()
+            protectedUntil = elapsed + difficulty.respawnProtection
         }
     }
 
@@ -1083,7 +1091,7 @@ final class DriftScene: SKScene {
         let rock = boulders.remove(at: index)
         let position = rock.node.position
         rock.node.removeFromParent()
-        ArcadeAudio.shared.play(.rock)
+        ArcadeAudio.shared.playRockBreak(level: rock.level)
         if modern {
             ModernVisuals.fractureBurst(in: self, at: position,
                                         radius: rock.radius, intensity: rock.level)
@@ -1548,14 +1556,14 @@ final class DriftScene: SKScene {
         missile.lineWidth = 2
         missile.glowWidth = modern ? 12 : 0
         missile.zRotation = heading
-        missile.position = CGPoint(x: ship.position.x + direction.dx * 26,
-                                   y: ship.position.y + direction.dy * 26)
+        missile.position = CGPoint(x: ship.position.x + direction.dx * 35,
+                                   y: ship.position.y + direction.dy * 35)
         missile.zPosition = 10
         addChild(missile)
         nuclearMissile = NuclearMissile(node: missile,
-            velocity: CGVector(dx: velocity.dx * 0.35 + direction.dx * 125,
-                               dy: velocity.dy * 0.35 + direction.dy * 125),
-            fuse: 1.7)
+            velocity: CGVector(dx: velocity.dx * 0.65 + direction.dx * 295,
+                               dy: velocity.dy * 0.65 + direction.dy * 295),
+            fuse: 2.0)
         ArcadeAudio.shared.play(.fire)
         updateHud()
     }
@@ -1567,8 +1575,8 @@ final class DriftScene: SKScene {
             CGPoint(x: missile.node.position.x + missile.velocity.dx * dt,
                     y: missile.node.position.y + missile.velocity.dy * dt), margin: 0)
         // Slowly decelerates so it appears to drift out from the ship.
-        missile.velocity.dx *= max(0, 1 - dt * 0.85)
-        missile.velocity.dy *= max(0, 1 - dt * 0.85)
+        missile.velocity.dx *= max(0, 1 - dt * 0.12)
+        missile.velocity.dy *= max(0, 1 - dt * 0.12)
         if modern && Int(elapsed * 18).isMultiple(of: 2) {
             ModernVisuals.cometSpark(in: self, at: missile.node.position,
                                      direction: missile.velocity)
@@ -1596,7 +1604,16 @@ final class DriftScene: SKScene {
         if modern {
             ModernVisuals.fractureBurst(in: self, at: point, radius: radius * 0.3, intensity: 5)
         }
-        // Destroy enemy hazards within blast radius, sparing the player ship.
+        // Launch position matters: a nuke that detonates too close will
+        // destroy its own ship, including through an active shield.
+        // This lethal core is intentionally smaller than the full blast.
+        let shipDistance = hypot(ship.position.x - point.x, ship.position.y - point.y)
+        let lethalRadius = min(180, radius * 0.50)
+        if shipDistance < lethalRadius {
+            destroyPlayerShip()
+        }
+
+        // Destroy enemy hazards within blast radius.
         if let target = saucer, hypot(target.node.position.x - point.x,
                                       target.node.position.y - point.y) < radius {
             destroySaucer()
