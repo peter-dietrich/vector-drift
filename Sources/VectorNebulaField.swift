@@ -13,15 +13,16 @@ import simd
 /// content or image panels are used.
 final class VectorNebulaField: SKNode {
     private struct AnimatedLayer {
-        let sprite: SKSpriteNode
+        let tiles: [SKSpriteNode]
+        let lensCenters: [SKUniform]
+        let gridOffsets: [CGPoint]
+        let tiled: Bool
         let time: SKUniform
         let drift: SKUniform
-        let center: SKUniform
         let lens: SKUniform
         let morph: SKUniform
         let warp: SKUniform
         let aspect: SKUniform
-        let wrap: SKUniform
         let direction: SKUniform
         let streak: SKUniform
         let perspective: CGFloat
@@ -31,6 +32,8 @@ final class VectorNebulaField: SKNode {
 
     private(set) var sceneSize: CGSize
     private var layers: [AnimatedLayer] = []
+    private var backdropGroup: SKNode?
+    private var sceneGeneration = 0
     private var lastTime: CGFloat?
     /// Integrated ship travel in world points. Unlike an eased offset, this
     /// keeps accumulating while the ship is coasting, so depth is observable.
@@ -53,12 +56,21 @@ final class VectorNebulaField: SKNode {
     func resize(to size: CGSize) {
         sceneSize = CGSize(width: max(1, size.width), height: max(1, size.height))
         for layer in layers {
-            layer.sprite.size = sceneSize
-            layer.sprite.position = CGPoint(x: sceneSize.width / 2,
-                                            y: sceneSize.height / 2)
+            let multiplier: CGFloat = layer.tiled ? 1 : 1.52
+            for tile in layer.tiles {
+                tile.size = CGSize(width: sceneSize.width * multiplier,
+                                   height: sceneSize.height * multiplier)
+            }
             layer.aspect.floatValue = Float(sceneSize.width / sceneSize.height)
         }
+        positionLayers()
         updateLens()
+    }
+
+    /// Build a new, genuinely random cloud bank and stellar population for
+    /// each wave. Crossfading preserves the sense of traversing space.
+    func regenerate() {
+        createLayers(transition: true)
     }
 
     func warpBurst() {
@@ -74,11 +86,12 @@ final class VectorNebulaField: SKNode {
         warpEnergy = max(0, warpEnergy - dt * 1.1)
         currentDensity = max(0, min(1, density))
 
-        // Translate an actual traveled distance into an apparent camera
-        // movement. Motion continues during inertia, not only while Up is held.
-        // Wrap periodic star/dust layers instead of clamping after ~30 px.
-        travel.dx -= shipVelocity.dx * dt * 0.82
-        travel.dy -= shipVelocity.dy * dt * 0.82
+        // Crucial: move SpriteKit geometry using real traveled distance,
+        // not a few pixels of shader UV shift. Moving while coasting works too.
+        travel.dx -= shipVelocity.dx * dt * 0.95
+        travel.dy -= shipVelocity.dy * dt * 0.95
+        positionLayers()
+
         let speed = hypot(shipVelocity.dx, shipVelocity.dy)
         let speedRatio = min(1, speed / 330)
         let normX = speed > 1 ? shipVelocity.dx / speed : 0
@@ -86,32 +99,45 @@ final class VectorNebulaField: SKNode {
 
         for (index, layer) in layers.enumerated() {
             let phase = layer.phase
-            let periodic = index == 0 || index == 5
-            let motionX: CGFloat
-            let motionY: CGFloat
-            if periodic {
-                // Stars and sparse dust can scroll perpetually in both axes.
-                motionX = (travel.dx / sceneSize.width) * layer.perspective
-                motionY = (travel.dy / sceneSize.height) * layer.perspective
-            } else {
-                // Cloud banks are finite structures. Let them shift markedly
-                // (~25-100 px), but reverse gently before revealing an edge.
-                motionX = sin(travel.dx / (sceneSize.width * 0.28)) *
-                          0.18 * layer.perspective
-                motionY = sin(travel.dy / (sceneSize.height * 0.31)) *
-                          0.16 * layer.perspective
-            }
             layer.time.floatValue = Float(time * (0.68 + CGFloat(index) * 0.07) + phase)
-            layer.drift.vectorFloat2Value = vector_float2(
-                Float(motionX), Float(motionY))
+            layer.drift.vectorFloat2Value = vector_float2(0, 0)
             layer.direction.vectorFloat2Value = vector_float2(Float(normX), Float(normY))
-            layer.streak.floatValue = Float(periodic ? speedRatio *
+            layer.streak.floatValue = Float(layer.tiled ? speedRatio *
                 (thrusting ? 0.85 : 0.45) : 0)
             layer.warp.floatValue = Float(warpEnergy *
                 (0.34 + layer.perspective * 0.43))
             let breath = 0.94 + 0.06 * sin(time * 0.14 + phase)
             let beltBoost: CGFloat = index == 5 ? 0.5 + currentDensity * 0.65 : 1
-            layer.sprite.alpha = layer.baseOpacity * breath * beltBoost
+            for tile in layer.tiles {
+                tile.alpha = layer.baseOpacity * breath * beltBoost
+            }
+        }
+        if lensLocation != nil { updateLens() }
+    }
+
+    private func positionLayers() {
+        let width = sceneSize.width
+        let height = sceneSize.height
+        for layer in layers {
+            if layer.tiled {
+                let offsetX = (travel.dx * layer.perspective)
+                    .truncatingRemainder(dividingBy: width)
+                let offsetY = (travel.dy * layer.perspective)
+                    .truncatingRemainder(dividingBy: height)
+                for (tile, coordinate) in zip(layer.tiles, layer.gridOffsets) {
+                    tile.position = CGPoint(x: width * (0.5 + coordinate.x) + offsetX,
+                                            y: height * (0.5 + coordinate.y) + offsetY)
+                }
+            } else {
+                // Nonrepeating gas banks are 152% the viewport size. Their
+                // bounded shifts create visible depth without hard panel edges.
+                let x = sin(travel.dx / max(1, width * 0.56)) *
+                    width * 0.17 * layer.perspective
+                let y = sin(travel.dy / max(1, height * 0.62)) *
+                    height * 0.15 * layer.perspective
+                layer.tiles[0].position = CGPoint(x: width * 0.5 + x,
+                                                  y: height * 0.5 + y)
+            }
         }
     }
 
@@ -127,61 +153,112 @@ final class VectorNebulaField: SKNode {
                 layer.lens.floatValue = 0
                 continue
             }
-            layer.center.vectorFloat2Value = vector_float2(
-                Float(location.x / sceneSize.width),
-                Float(location.y / sceneSize.height))
             layer.lens.floatValue = Float(lensIntensity)
+            for (tile, center) in zip(layer.tiles, layer.lensCenters) {
+                center.vectorFloat2Value = vector_float2(
+                    Float((location.x - tile.position.x) / tile.size.width + 0.5),
+                    Float((location.y - tile.position.y) / tile.size.height + 0.5))
+            }
         }
     }
 
     // MARK: - Vector artwork
 
-    private func createLayers() {
+    private func createLayers(transition: Bool = false) {
+        let oldGroup = backdropGroup
+        let group = SKNode()
+        group.zPosition = 0
+        addChild(group)
+        backdropGroup = group
+        layers.removeAll()
+        travel = .zero
+        lastTime = nil
+        sceneGeneration += 1
+
+        // Each call generates fresh randomized stars, cluster layouts,
+        // gas boundaries, filaments and dust.
         addLayer(texture: makeStars(), depth: -17,
-                 opacity: 1, parallax: 0.30, morph: 0, phase: 0)
+                 opacity: 1, parallax: 0.32, morph: 0, phase: 0)
         addLayer(texture: makeClouds(tier: 0, blur: 34), depth: -16,
-                 opacity: 0.82, parallax: 0.29, morph: 0.009, phase: 1.3)
+                 opacity: 0.82, parallax: 0.35, morph: 0.009, phase: 1.3)
         addLayer(texture: makeClouds(tier: 1, blur: 17), depth: -15,
-                 opacity: 0.88, parallax: 0.57, morph: 0.016, phase: 3.7)
+                 opacity: 0.88, parallax: 0.65, morph: 0.016, phase: 3.7)
         addLayer(texture: makeClouds(tier: 2, blur: 5), depth: -14,
-                 opacity: 0.70, parallax: 0.90, morph: 0.022, phase: 5.9)
+                 opacity: 0.70, parallax: 1.00, morph: 0.022, phase: 5.9)
         addLayer(texture: makeFilaments(), depth: -13,
-                 opacity: 0.64, parallax: 0.86, morph: 0.008, phase: 2.8)
+                 opacity: 0.52, parallax: 0.90, morph: 0.008, phase: 2.8)
         addLayer(texture: makeDust(), depth: -12,
-                 opacity: 0.36, parallax: 1.60, morph: 0.003, phase: 4.5)
+                 opacity: 0.36, parallax: 1.55, morph: 0.003, phase: 4.5)
+
+        positionLayers()
+        updateLens()
+
+        if let oldGroup {
+            group.alpha = 0
+            group.run(.fadeIn(withDuration: 1.5))
+            oldGroup.run(.sequence([
+                .fadeOut(withDuration: 1.5),
+                .removeFromParent()
+            ]))
+        } else {
+            group.alpha = 1
+        }
     }
 
     private func addLayer(texture: SKTexture, depth: CGFloat,
                           opacity: CGFloat, parallax: CGFloat,
                           morph: Float, phase: CGFloat) {
+        let tiled = depth == -17 || depth == -12
         let time = SKUniform(name: "u_time", float: 0)
         let drift = SKUniform(name: "u_drift", vectorFloat2: vector_float2(0, 0))
-        let center = SKUniform(name: "u_lensCenter", vectorFloat2: vector_float2(0.5, 0.5))
         let lens = SKUniform(name: "u_lensStrength", float: 0)
         let morphUniform = SKUniform(name: "u_morph", float: morph)
         let warp = SKUniform(name: "u_warp", float: 0)
         let aspect = SKUniform(name: "u_aspect",
                                float: Float(sceneSize.width / sceneSize.height))
-        let wrap = SKUniform(name: "u_wrap", float: depth == -17 || depth == -12 ? 1 : 0)
+        let wrap = SKUniform(name: "u_wrap", float: tiled ? 1 : 0)
         let direction = SKUniform(name: "u_direction", vectorFloat2: vector_float2(0, 0))
         let streak = SKUniform(name: "u_streak", float: 0)
 
-        let shader = SKShader(source: Self.flowAndLensingShader)
-        shader.uniforms = [time, drift, center, lens, morphUniform, warp,
-                           aspect, wrap, direction, streak]
+        var tiles: [SKSpriteNode] = []
+        var lensCenters: [SKUniform] = []
+        var gridOffsets: [CGPoint] = []
 
-        let sprite = SKSpriteNode(texture: texture, size: sceneSize)
-        sprite.position = CGPoint(x: sceneSize.width / 2, y: sceneSize.height / 2)
-        sprite.zPosition = depth
-        sprite.alpha = opacity
-        sprite.shader = shader
-        sprite.blendMode = depth == -17 ? .alpha : .add
-        addChild(sprite)
+        let coordinates: [CGPoint] = tiled
+            ? (-1...1).flatMap { x in
+                (-1...1).map { y in CGPoint(x: CGFloat(x), y: CGFloat(y)) }
+              }
+            : [CGPoint.zero]
 
-        layers.append(AnimatedLayer(sprite: sprite, time: time,
-                                    drift: drift, center: center, lens: lens,
+        for coordinate in coordinates {
+            let center = SKUniform(name: "u_lensCenter",
+                                    vectorFloat2: vector_float2(0.5, 0.5))
+            let shader = SKShader(source: Self.flowAndLensingShader)
+            shader.uniforms = [time, drift, center, lens, morphUniform,
+                               warp, aspect, wrap, direction, streak]
+
+            let multiplier: CGFloat = tiled ? 1 : 1.52
+            let sprite = SKSpriteNode(texture: texture,
+                size: CGSize(width: sceneSize.width * multiplier,
+                             height: sceneSize.height * multiplier))
+            sprite.position = CGPoint(x: sceneSize.width / 2,
+                                      y: sceneSize.height / 2)
+            sprite.zPosition = depth
+            sprite.alpha = opacity
+            sprite.shader = shader
+            sprite.blendMode = depth == -17 ? .alpha : .add
+            backdropGroup?.addChild(sprite)
+
+            tiles.append(sprite)
+            lensCenters.append(center)
+            gridOffsets.append(coordinate)
+        }
+
+        layers.append(AnimatedLayer(tiles: tiles, lensCenters: lensCenters,
+                                    gridOffsets: gridOffsets, tiled: tiled,
+                                    time: time, drift: drift, lens: lens,
                                     morph: morphUniform, warp: warp,
-                                    aspect: aspect, wrap: wrap, direction: direction,
+                                    aspect: aspect, direction: direction,
                                     streak: streak, perspective: parallax,
                                     baseOpacity: opacity, phase: phase))
     }
