@@ -1686,7 +1686,7 @@ final class DriftScene: SKScene {
             boulders[i].node.zRotation = CGFloat(saved.rotation)
             boulders[i].spin = CGFloat(saved.spin)
             boulders[i].hitPoints = saved.hitPoints
-            boulders[i].fractureRemaining = saved.remainingFracture.map(CGFloat.init)
+            boulders[i].fractureRemaining = saved.remainingFracture.map { CGFloat($0) }
             boulders[i].fractureDuration = CGFloat(saved.fractureDuration)
             let stage = boulders[i].maximumHitPoints - saved.hitPoints
             boulders[i].crack.isHidden = stage < 1
