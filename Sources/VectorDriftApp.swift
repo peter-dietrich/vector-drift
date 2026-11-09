@@ -1316,6 +1316,130 @@ final class DriftScene: SKScene {
         comet = Comet(node: node, velocity: v, remaining: (size.width + 140) / speed + 1)
     }
 
+    /// A rare gravity well. Far from its center the ship can thrust away;
+    /// within the event horizon, shields offer no protection.
+    private func updateBlackHole(_ dt: CGFloat) {
+        guard customRules?.blackHoleEnabled ?? true else {
+            blackHole?.node.removeFromParent()
+            blackHole = nil
+            backgroundLayer?.setScale(1)
+            return
+        }
+        if blackHole == nil && wave >= 3 && elapsed - lastBlackHole >= nextBlackHoleDelay {
+            spawnBlackHole()
+        }
+        guard var hole = blackHole else { return }
+        hole.remaining -= dt
+        if hole.remaining <= 0 {
+            hole.node.removeFromParent()
+            blackHole = nil
+            backgroundLayer?.setScale(1)
+            lastBlackHole = elapsed
+            nextBlackHoleDelay = CGFloat.random(in: 25...42)
+            return
+        }
+        blackHole = hole
+        hole.node.zRotation += dt * 0.75
+        let center = hole.node.position
+        if modern { backgroundLayer?.setScale(1 + 0.018 * sin(elapsed * 5)) }
+
+        func pull(at point: CGPoint) -> CGVector {
+            let dx = center.x - point.x, dy = center.y - point.y
+            let d = max(1, hypot(dx, dy))
+            guard d < 370 else { return .zero }
+            let acceleration = min(1050, 100000 / max(95, d))
+            return CGVector(dx: dx / d * acceleration * dt,
+                            dy: dy / d * acceleration * dt)
+        }
+        if !ship.isHidden && !over {
+            let a = pull(at: ship.position)
+            velocity.dx += a.dx
+            velocity.dy += a.dy
+            if hypot(center.x - ship.position.x, center.y - ship.position.y) < 19 {
+                shieldActive = false
+                shieldNode.isHidden = true
+                lives -= 1
+                ArcadeAudio.shared.stopThrust()
+                ArcadeAudio.shared.play(.ship)
+                shipImpact()
+                if lives <= 0 {
+                    over = true
+                    saveFinalScore()
+                    message.text = "GAME OVER  •  PRESS RETURN"
+                    stagePanel.isHidden = false
+                } else {
+                    resetShip()
+                    protectedUntil = elapsed + difficulty.respawnProtection
+                }
+                updateHud()
+            }
+        }
+        for i in boulders.indices.reversed() {
+            let a = pull(at: boulders[i].node.position)
+            boulders[i].velocity.dx += a.dx
+            boulders[i].velocity.dy += a.dy
+            if hypot(center.x - boulders[i].node.position.x,
+                     center.y - boulders[i].node.position.y) < 20 {
+                boulders.remove(at: i).node.removeFromParent()
+            }
+        }
+        for i in lasers.indices.reversed() {
+            let a = pull(at: lasers[i].node.position)
+            lasers[i].velocity.dx += a.dx
+            lasers[i].velocity.dy += a.dy
+            if hypot(center.x - lasers[i].node.position.x,
+                     center.y - lasers[i].node.position.y) < 18 {
+                lasers.remove(at: i).node.removeFromParent()
+            }
+        }
+        for i in enemyShots.indices.reversed() {
+            let a = pull(at: enemyShots[i].node.position)
+            enemyShots[i].velocity.dx += a.dx
+            enemyShots[i].velocity.dy += a.dy
+            if hypot(center.x - enemyShots[i].node.position.x,
+                     center.y - enemyShots[i].node.position.y) < 18 {
+                enemyShots.remove(at: i).node.removeFromParent()
+            }
+        }
+        if var missile = nuclearMissile {
+            let a = pull(at: missile.node.position)
+            missile.velocity.dx += a.dx
+            missile.velocity.dy += a.dy
+            nuclearMissile = missile
+        }
+    }
+
+    private func spawnBlackHole() {
+        let node = SKNode()
+        node.position = CGPoint(
+            x: CGFloat.random(in: (size.width * 0.2)...(size.width * 0.8)),
+            y: CGFloat.random(in: (size.height * 0.2)...(size.height * 0.8)))
+        node.zPosition = 8
+        let radius: CGFloat = modern ? 28 : 22
+        let disk = SKShapeNode(circleOfRadius: radius + 17)
+        disk.strokeColor = modern ? ModernVisuals.fire : .white
+        disk.fillColor = .clear
+        disk.lineWidth = modern ? 7 : 2
+        disk.glowWidth = modern ? 26 : 0
+        node.addChild(disk)
+        let ring = SKShapeNode(ellipseOf: CGSize(width: radius * 3.7, height: radius))
+        ring.strokeColor = modern ? .systemPurple : .white
+        ring.fillColor = .clear
+        ring.lineWidth = 2
+        ring.glowWidth = modern ? 15 : 0
+        ring.zRotation = -.pi / 5
+        node.addChild(ring)
+        let core = SKShapeNode(circleOfRadius: radius)
+        core.fillColor = .black
+        core.strokeColor = .white
+        core.lineWidth = modern ? 2.8 : 1.5
+        core.glowWidth = modern ? 15 : 0
+        node.addChild(core)
+        addChild(node)
+        blackHole = BlackHoleEvent(node: node, remaining: 11)
+        ArcadeAudio.shared.play(.comet)
+    }
+
     private func launchNuclearMissile() {
         guard missilesRemaining > 0, nuclearMissile == nil, !over, !titleVisible else { return }
         missilesRemaining -= 1
