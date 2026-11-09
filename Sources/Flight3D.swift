@@ -62,17 +62,17 @@ private struct SpaceRock3D {
     var velocity: SCNVector3
     var level: Int
     var health: Int
-    var fractureTime: Float?
+    var fractureTime: CGFloat?
 }
 private struct SpaceShot3D {
     let node: SCNNode
     var velocity: SCNVector3
-    var remaining: Float
+    var remaining: CGFloat
 }
 private struct NuclearMissile3D {
     let node: SCNNode
     var velocity: SCNVector3
-    var fuse: Float
+    var fuse: CGFloat
 }
 
 final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
@@ -85,27 +85,27 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
     private var missilesRemaining = 2
     private var pressed = Set<UInt16>()
     private var previous: TimeInterval = 0
-    private var elapsed: Float = 0
-    private var lastShot: Float = -2
-    private var invulnerableUntil: Float = 0
+    private var elapsed: CGFloat = 0
+    private var lastShot: CGFloat = -2
+    private var invulnerableUntil: CGFloat = 0
     private var shipVelocity = SCNVector3Zero
-    private var yaw: Float = 0
-    private var pitch: Float = 0
-    private var roll: Float = 0
+    private var yaw: CGFloat = 0
+    private var pitch: CGFloat = 0
+    private var roll: CGFloat = 0
     private var score = 0
     private var lives = 3
     private var wave = 1
     private var gameOver = false
     private var paused = false
     private var shieldActive = false
-    private var shieldRemaining: Float = 5
-    private var shieldCooldownRemaining: Float = 0
+    private var shieldRemaining: CGFloat = 5
+    private var shieldCooldownRemaining: CGFloat = 0
     private let shield = SCNNode()
     private let headlight = SCNNode()
     private let overlay = SCNNode()
     private let scoreLabel = SCNNode()
     private var message: String = ""
-    private let boundary: Float = 135
+    private let boundary: CGFloat = 135
 
     var difficulty = "medium" {
         didSet { restart() }
@@ -128,7 +128,7 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
     private func configureScene() {
         scene.background.contents = NSColor(calibratedRed: 0.006, green: 0.014, blue: 0.038, alpha: 1)
         let atmosphere = SCNNode()
-        scene.rootNode.addChild(atmosphere)
+        scene.rootNode.addChildNode(atmosphere)
 
         for index in 0..<320 {
             let star = SCNNode(geometry: SCNSphere(radius: index.isMultiple(of: 8) ? 0.15 : 0.075))
@@ -142,9 +142,9 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
             mat.emission.contents = mat.diffuse.contents
             star.geometry?.materials = [mat]
             star.position = SCNVector3(
-                Float.random(in: -170...170),
-                Float.random(in: -170...170),
-                Float.random(in: -170...170)
+                CGFloat.random(in: -170...170),
+                CGFloat.random(in: -170...170),
+                CGFloat.random(in: -170...170)
             )
             atmosphere.addChildNode(star)
         }
@@ -157,7 +157,7 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
         hull.geometry?.firstMaterial?.roughness.contents = 0.25
         ship.addChildNode(hull)
 
-        for direction: Float in [-1, 1] {
+        for direction: CGFloat in [-1, 1] {
             let wing = SCNNode(geometry: SCNBox(width: 2.2, height: 0.12, length: 1.15, chamferRadius: 0.08))
             wing.position = SCNVector3(direction * 1.05, -0.20, 0.65)
             wing.eulerAngles.z = direction * 0.13
@@ -203,7 +203,7 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
         distant.light = SCNLight()
         distant.light?.type = .directional
         distant.light?.intensity = 900
-        distant.eulerAngles = SCNVector3(-.pi / 3, -.pi / 5, 0)
+        distant.eulerAngles = SCNVector3(-CGFloat.pi / 3, -CGFloat.pi / 5, 0)
         scene.rootNode.addChildNode(distant)
         scene.lightingEnvironment.intensity = 0.38
     }
@@ -231,7 +231,7 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
         paused = false
         gameOver = false
         shieldActive = false
-        shieldRemaining = Float(rules.shieldDuration)
+        shieldRemaining = CGFloat(rules.shieldDuration)
         shieldCooldownRemaining = 0
         shield.isHidden = true
         invulnerableUntil = 2
@@ -251,7 +251,7 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
         case 1: // S
             if !shieldActive && shieldCooldownRemaining == 0 && !gameOver {
                 shieldActive = true
-                shieldRemaining = Float(rules.shieldDuration)
+                shieldRemaining = CGFloat(rules.shieldDuration)
                 shield.isHidden = false
             } else if shieldActive {
                 stopShield()
@@ -263,12 +263,12 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
     private func stopShield() {
         shieldActive = false
         shield.isHidden = true
-        shieldCooldownRemaining = Float(rules.shieldCooldown)
+        shieldCooldownRemaining = CGFloat(rules.shieldCooldown)
     }
 
-    private func speed(for level: Int) -> Float {
-        let base: Float = [0, 28, 20, 15, 10, 7][min(5, max(1, level))]
-        return base * Float(rules.asteroidSpeed)
+    private func speed(for level: Int) -> CGFloat {
+        let base: CGFloat = [0, 28, 20, 15, 10, 7][min(5, max(1, level))]
+        return base * CGFloat(rules.asteroidSpeed)
     }
 
     private func spawnWave() {
@@ -276,20 +276,20 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
         for i in 0..<number {
             let level = rules.initialRockLevel(at: i)
             let point = SCNVector3(
-                Float.random(in: -100...100),
-                Float.random(in: -65...65),
-                Float.random(in: -115...(-32))
+                CGFloat.random(in: -100...100),
+                CGFloat.random(in: -65...65),
+                CGFloat.random(in: -115...(-32))
             )
             let speed = speed(for: level)
             let motion = normalize(SCNVector3(
-                Float.random(in: -1...1), Float.random(in: -1...1), Float.random(in: -1...1)
+                CGFloat.random(in: -1...1), CGFloat.random(in: -1...1), CGFloat.random(in: -1...1)
             ))
             addRock(level: level, at: point, velocity: multiply(motion, speed))
         }
     }
 
     private func addRock(level: Int, at point: SCNVector3, velocity: SCNVector3,
-                         health overrideHealth: Int? = nil, timer: Float? = nil) {
+                         health overrideHealth: Int? = nil, timer: CGFloat? = nil) {
         let radius: CGFloat = CGFloat([0, 0.9, 1.65, 2.8, 4.4, 6.3][min(5, max(1, level))])
         let shape = SCNSphere(radius: radius)
         shape.segmentCount = level >= 4 ? 9 : 7
@@ -305,7 +305,7 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
         shape.firstMaterial = material
         let node = SCNNode(geometry: shape)
         node.position = point
-        node.eulerAngles = SCNVector3(Float.random(in: 0...(.pi)), Float.random(in: 0...(.pi)), 0)
+        node.eulerAngles = SCNVector3(CGFloat.random(in: 0...(.pi)), CGFloat.random(in: 0...(.pi)), 0)
         scene.rootNode.addChildNode(node)
         rocks.append(SpaceRock3D(node: node, velocity: velocity, level: level,
                                  health: overrideHealth ?? rules.hits(level: level, difficulty: difficulty),
@@ -325,7 +325,7 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
         scene.rootNode.addChildNode(node)
         shots.append(SpaceShot3D(node: node,
                                  velocity: add(shipVelocity, multiply(direction, 115)),
-                                 remaining: Float(rules.bulletLifetime)))
+                                 remaining: CGFloat(rules.bulletLifetime)))
         if soundEnabled { ArcadeAudio.shared.play(.fire) }
     }
 
@@ -339,7 +339,7 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
     }
 
     func renderer(_ renderer: any SCNSceneRenderer, updateAtTime time: TimeInterval) {
-        let dt = previous == 0 ? Float(1 / 60.0) : Float(min(1 / 30.0, max(0, time - previous)))
+        let dt = previous == 0 ? CGFloat(1 / 60.0) : CGFloat(min(1 / 30.0, max(0, time - previous)))
         previous = time
         guard !paused && !gameOver else { return }
         elapsed += dt
@@ -365,12 +365,12 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
         if pressed.contains(13) { shipVelocity.y += 31 * dt } // W
         if pressed.contains(7) { shipVelocity.y -= 31 * dt } // X
 
-        let maxSpeed: Float = difficulty == "hard" ? 75 : 65
+        let maxSpeed: CGFloat = difficulty == "hard" ? 75 : 65
         let magnitude = length(shipVelocity)
         if magnitude > maxSpeed { shipVelocity = multiply(normalize(shipVelocity), maxSpeed) }
         ship.position = wrapped(add(ship.position, multiply(shipVelocity, dt)))
 
-        if pressed.contains(49) && elapsed - lastShot > Float(rules.shotInterval)
+        if pressed.contains(49) && elapsed - lastShot > CGFloat(rules.shotInterval)
             && shots.count < rules.maxBullets {
             lastShot = elapsed
             fire()
@@ -475,7 +475,7 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
         if soundEnabled { ArcadeAudio.shared.play(.comet) }
     }
 
-    private func updateNuclearMissile(_ dt: Float) {
+    private func updateNuclearMissile(_ dt: CGFloat) {
         guard var missile = nuclearMissile else { return }
         missile.fuse -= dt
         missile.node.position = wrapped(add(missile.node.position,
@@ -489,7 +489,7 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
         missile.node.removeFromParentNode()
         let point = missile.node.position
         // A spherical blast approximately one third of the arena's span.
-        let blastRadius: Float = 48
+        let blastRadius: CGFloat = 48
         let sphere = SCNNode(geometry: SCNSphere(radius: 1))
         let effect = SCNMaterial()
         effect.diffuse.contents = NSColor(calibratedRed: 1, green: 0.48, blue: 0.12, alpha: 0.24)
@@ -514,7 +514,7 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
         if soundEnabled { ArcadeAudio.shared.play(.comet) }
     }
 
-    private func radius(for level: Int) -> Float {
+    private func radius(for level: Int) -> CGFloat {
         [0, 0.9, 1.65, 2.8, 4.4, 6.3][min(5, max(1, level))]
     }
 
@@ -523,7 +523,7 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
         rock.node.removeFromParentNode()
         if awardPoints { score += 20 * (6 - rock.level) }
         guard rock.level > 1 else { return }
-        for side in [-1.0, 1.0] as [Float] {
+        for side in [-1.0, 1.0] as [CGFloat] {
             let offset = SCNVector3(side * 2, side * 1.5, -side)
             let nextDirection = normalize(add(rock.velocity, multiply(offset, 25)))
             addRock(level: rock.level - 1, at: rock.node.position,
@@ -537,7 +537,7 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
                               max(-boundary, min(boundary, p.y)),
                               max(-boundary, min(boundary, p.z)))
         }
-        func wrappedCoordinate(_ number: Float) -> Float {
+        func wrappedCoordinate(_ number: CGFloat) -> CGFloat {
             if number > boundary { return -boundary }
             if number < -boundary { return boundary }
             return number
@@ -551,13 +551,13 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
     private func subtract(_ a: SCNVector3, _ b: SCNVector3) -> SCNVector3 {
         SCNVector3(a.x - b.x, a.y - b.y, a.z - b.z)
     }
-    private func multiply(_ vector: SCNVector3, _ amount: Float) -> SCNVector3 {
+    private func multiply(_ vector: SCNVector3, _ amount: CGFloat) -> SCNVector3 {
         SCNVector3(vector.x * amount, vector.y * amount, vector.z * amount)
     }
-    private func dot(_ a: SCNVector3, _ b: SCNVector3) -> Float {
+    private func dot(_ a: SCNVector3, _ b: SCNVector3) -> CGFloat {
         a.x * b.x + a.y * b.y + a.z * b.z
     }
-    private func length(_ v: SCNVector3) -> Float {
+    private func length(_ v: SCNVector3) -> CGFloat {
         sqrt(dot(v, v))
     }
     private func normalize(_ v: SCNVector3) -> SCNVector3 {
