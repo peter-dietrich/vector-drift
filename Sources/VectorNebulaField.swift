@@ -294,11 +294,17 @@ final class VectorNebulaField: SKNode {
         vec2 delta = deformed - u_lensCenter;
         vec2 metric = vec2(delta.x * u_aspect, delta.y);
         float r = length(metric);
-        float annulus = smoothstep(.014,.049,r) *
-                        (1.0-smoothstep(.19,.32,r));
+        // Refraction peaks close to the shadow and eases out into the
+        // surrounding gas and star clusters. The extra thin ring reproduces
+        // the strong apparent bending close to the photon orbit.
+        float outerLens = smoothstep(.016,.047,r) *
+                          (1.0-smoothstep(.22,.37,r));
+        float photonOrbit = exp(-pow((r-.065)/.020,2.0));
         vec2 normal = metric / max(r,.0001);
+        float bendAmount = u_lensStrength *
+                           (.046*outerLens/(.40+r*6.0)+.009*photonOrbit);
         vec2 deflection = vec2(normal.x / max(u_aspect,.001),normal.y) *
-                          (u_lensStrength*.032*annulus/(.50+r*7.0));
+                          bendAmount;
         vec2 sampleUV = deformed + deflection;
 
         vec4 pixel = vec4(0.0);
