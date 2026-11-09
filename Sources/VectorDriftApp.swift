@@ -827,7 +827,7 @@ final class DriftScene: SKScene {
         if rock.level > 1 {
             let travelAngle = atan2(rock.velocity.dy, rock.velocity.dx)
             let nextLevel = rock.level - 1
-            for spread: CGFloat in [-0.75, 0.75] {
+            for spread in [-0.75, 0.75] as [CGFloat] {
                 let angle = travelAngle + spread
                 let speed = rockSpeed(for: nextLevel)
                 spawnRock(level: nextLevel, at: position,
