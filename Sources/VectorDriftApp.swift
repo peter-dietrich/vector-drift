@@ -266,7 +266,13 @@ private struct GameWindow: View {
                     ? "3D: ← → Yaw  I K Pitch  Q E Roll  W X Rise/Dive  A D Strafe  ↑ Thrust  ↓ Reverse  Space Fire  S Shield  N Missile"
                     : "← → Rotate  ↑ Thrust  Space Fire  S Shield  N Missile  ↓ Warp  P Pause  R Restart")
                 Spacer()
-                Text("Click playfield for keyboard focus")
+                if mode == Look.modern.rawValue {
+                    Text("Sky: NASA / ESA / CSA / STScI")
+                        .foregroundStyle(.white.opacity(0.46))
+                        .help("Photo layers are downloaded and cached on first launch. Sources: NASA SVS 31285 and 12086.")
+                } else {
+                    Text("Click playfield for keyboard focus")
+                }
             }
             .font(.system(size: 11, design: .monospaced))
             .padding(12)
