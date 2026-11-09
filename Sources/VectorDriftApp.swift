@@ -270,7 +270,7 @@ final class DriftScene: SKScene {
                     UserDefaults.standard.set(high, forKey: "highScore")
                 }
                 if rock.level > 1 {
-                    for direction: CGFloat in [-0.75, 0.75] {
+                    for direction in [-0.75, 0.75] as [CGFloat] {
                         let angle = atan2(rock.velocity.dy, rock.velocity.dx) + direction
                         let speed: CGFloat = rock.level == 3 ? 115 : 155
                         spawnRock(level: rock.level - 1, at: rock.node.position,
