@@ -32,6 +32,18 @@ A GitHub Actions macOS build runs on pushes to `main` and pull requests. This is
 
 Click inside the playfield for keyboard focus. In **3D Flight**, left/right arrows yaw, **I/K** pitch, **Q/E** roll, **W/X** rise/dive, **A/D** strafe; Up thrusts forward and Down reverses. Space fires, S shields and N launches a missile.
 
+## v0.10.2 — A new sky on every run and every wave; actual spatial parallax
+
+- **Fresh generation on New Game:** entering Modern or starting a new Modern game generates a new randomized nebula, stars, galaxies, and dust. Classic graphics remain unchanged.
+- **Fresh generation after each wave:** the next wave generates a distinct starfield and cloud bank. Old and new space regions crossfade over 1.5 seconds.
+- **Physically scrolling layers:** the former shader-only offset still looked stationary. The 2D renderer now integrates the ship's actual velocity into background travel and moves SpriteKit sprites with different depth factors. Motion continues while coasting, not just while holding thrust.
+- **Endless star and dust scrolling:** four tiled star/dust sprites fill the viewport, repeating as the background moves. Far stars and near dust move at different speeds. Near dust shifts much faster, enhancing the impression of travel.
+- **Bounded but visible nebula parallax:** separate oversized gas layers translate at different speeds and follow smoothly bounded trajectories; no photo panels or exposed rectangular boundaries.
+- **Black-hole lensing retained:** individual tile uniforms update against each moving tile so gravitational refraction still works while the scene scrolls.
+- **Performance guardrail:** only four tiles per repeating layer are rendered, not nine. New vector textures are generated on wave transitions, not on every frame.
+
+To verify motion, select Modern, start playing and hold Up for several seconds. The background should visibly shift as you accelerate and keep moving while you coast. Note that PAUSE and GAME OVER intentionally freeze the animation.
+
 ## v0.10.1 — Visible motion and coherent gas edges
 
 The initial v0.10 background was visually attractive but barely moved during flight, because its parallax displacement was limited to about 38×30 points and eased back toward zero. This version integrates actual ship travel continuously and assigns different speeds to layers:
