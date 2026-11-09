@@ -581,6 +581,7 @@ final class DriftScene: SKScene {
     }
 
     override func didChangeSize(_ oldSize: CGSize) {
+        backgroundLayer?.resize(to: size)
         hud.position = CGPoint(x: 20, y: size.height - 20)
         statusHUD.position = CGPoint(x: size.width - 20, y: size.height - 20)
         message.position = CGPoint(x: size.width / 2, y: size.height / 2)
