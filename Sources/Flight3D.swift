@@ -608,6 +608,108 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
         if soundEnabled { ArcadeAudio.shared.play(.nuclear) }
     }
 
+    private func saved(_ v: SCNVector3) -> SavedVector3D {
+        SavedVector3D(x: Double(v.x), y: Double(v.y), z: Double(v.z))
+    }
+    private func loaded(_ v: SavedVector3D) -> SCNVector3 {
+        SCNVector3(CGFloat(v.x), CGFloat(v.y), CGFloat(v.z))
+    }
+
+    func makeSnapshot() -> Flight3DSnapshot? {
+        guard !gameOver && !paused else { return nil }
+        return Flight3DSnapshot(
+            difficulty: difficulty, customRules: customRules,
+            score: score, lives: lives, wave: wave, elapsed: Double(elapsed),
+            yaw: Double(yaw), pitch: Double(pitch), roll: Double(roll),
+            shipPosition: saved(ship.position), shipVelocity: saved(shipVelocity),
+            protectionRemaining: Double(max(0, invulnerableUntil - elapsed)),
+            shieldActive: shieldActive, shieldRemaining: Double(shieldRemaining),
+            shieldRechargeRemaining: Double(shieldCooldownRemaining),
+            lastShotAgo: Double(elapsed - lastShot), missilesRemaining: missilesRemaining,
+            missile: nuclearMissile.map {
+                SavedShot3D(position: saved($0.node.position),
+                            velocity: saved($0.velocity), remaining: Double($0.fuse))
+            },
+            rocks: rocks.map {
+                SavedRock3D(level: $0.level, position: saved($0.node.position),
+                            velocity: saved($0.velocity), health: $0.health,
+                            fractureRemaining: $0.fractureTime.map { Double($0) })
+            },
+            shots: shots.map {
+                SavedShot3D(position: saved($0.node.position),
+                            velocity: saved($0.velocity), remaining: Double($0.remaining))
+            },
+            blackHolePosition: blackHole.map { saved($0.position) },
+            blackHoleRemaining: Double(blackHoleRemaining),
+            lastBlackHoleAgo: Double(elapsed - lastBlackHole),
+            nextBlackHoleDelay: Double(nextBlackHoleDelay))
+    }
+
+    func restore(_ data: Flight3DSnapshot) {
+        difficulty = data.difficulty
+        customRules = data.customRules
+        restart()
+        for rock in rocks { rock.node.removeFromParentNode() }
+        for shot in shots { shot.node.removeFromParentNode() }
+        rocks.removeAll()
+        shots.removeAll()
+        elapsed = CGFloat(data.elapsed)
+        previous = 0
+        score = data.score
+        lives = data.lives
+        wave = data.wave
+        yaw = CGFloat(data.yaw)
+        pitch = CGFloat(data.pitch)
+        roll = CGFloat(data.roll)
+        ship.eulerAngles = SCNVector3(-pitch, yaw, roll)
+        ship.position = loaded(data.shipPosition)
+        shipVelocity = loaded(data.shipVelocity)
+        invulnerableUntil = elapsed + CGFloat(data.protectionRemaining)
+        shieldActive = data.shieldActive
+        shieldRemaining = CGFloat(data.shieldRemaining)
+        shieldCooldownRemaining = CGFloat(data.shieldRechargeRemaining)
+        shield.isHidden = !shieldActive
+        lastShot = elapsed - CGFloat(data.lastShotAgo)
+        missilesRemaining = data.missilesRemaining
+        lastBlackHole = elapsed - CGFloat(data.lastBlackHoleAgo)
+        nextBlackHoleDelay = CGFloat(data.nextBlackHoleDelay)
+        paused = false
+        gameOver = false
+        pressed.removeAll()
+        for rock in data.rocks {
+            addRock(level: rock.level, at: loaded(rock.position),
+                    velocity: loaded(rock.velocity),
+                    health: rock.health,
+                    timer: rock.fractureRemaining.map { CGFloat($0) })
+            if rock.health < rules.hits(level: rock.level, difficulty: difficulty) {
+                rocks[rocks.count - 1].node.geometry?.firstMaterial?.diffuse.contents = NSColor.orange
+            }
+        }
+        for savedShot in data.shots {
+            let node = SCNNode(geometry: SCNSphere(radius: 0.22))
+            node.geometry?.firstMaterial?.emission.contents = NSColor.cyan
+            node.position = loaded(savedShot.position)
+            scene.rootNode.addChildNode(node)
+            shots.append(SpaceShot3D(node: node, velocity: loaded(savedShot.velocity),
+                                     remaining: CGFloat(savedShot.remaining)))
+        }
+        if let savedMissile = data.missile {
+            let node = SCNNode(geometry: SCNCapsule(capRadius: 0.34, height: 1.9))
+            node.geometry?.firstMaterial?.emission.contents = NSColor.orange
+            node.position = loaded(savedMissile.position)
+            scene.rootNode.addChildNode(node)
+            nuclearMissile = NuclearMissile3D(node: node,
+                velocity: loaded(savedMissile.velocity), fuse: CGFloat(savedMissile.remaining))
+        }
+        blackHole?.removeFromParentNode()
+        blackHole = nil
+        if let position = data.blackHolePosition {
+            spawnBlackHole()
+            blackHole?.position = loaded(position)
+            blackHoleRemaining = CGFloat(data.blackHoleRemaining)
+        }
+    }
+
     private func radius(for level: Int) -> CGFloat {
         [0, 0.9, 1.65, 2.8, 4.4, 6.3][min(5, max(1, level))]
     }
