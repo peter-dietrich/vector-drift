@@ -52,7 +52,12 @@ final class ModernSpaceBackdrop: SKNode {
             gl_FragColor = imageColor * v_color_mix;
         }
         """)
-        shader.uniforms = [lensCenter, lensStrength]
+        shader.uniforms = [
+            lensCenter, lensStrength,
+            SKUniform(name: "u_sprite_size",
+                      vectorFloat2: vector_float2(Float(sceneSize.width),
+                                                   Float(sceneSize.height)))
+        ]
         stars.shader = shader
         addChild(stars)
 
