@@ -32,6 +32,14 @@ A GitHub Actions macOS build runs on pushes to `main` and pull requests. This is
 
 Click inside the playfield for keyboard focus. In **3D Flight**, left/right arrows yaw, **I/K** pitch, **Q/E** roll, **W/X** rise/dive, **A/D** strafe; Up thrusts forward and Down reverses. Space fires, S shields and N launches a missile.
 
+## v0.12 — Darker, richer black holes
+
+- **Modern 2D:** replaces the old stationary circle and thin purple-gray torus with a nearly black event horizon, asymmetric narrow photon ring, and tilted front/back accretion disk in quiet white, graphite and muted warm tones. Sparse luminous knots orbit slowly; the center stays dark.
+- **Background lensing:** all vector-generated star and nebula layers are refracted more strongly around the hole, with a sharper lensing band near the photon orbit. The artwork remains original and procedural—no photographic assets or downloads.
+- **Classic 2D:** retains a restrained monochrome black-circle hazard with a faint outer boundary.
+- **3D Flight:** replaces the bright colored torus with a black sphere, multiple thin softly colored accretion bands, and orbiting dust grains. Existing 3D gravity gameplay is unchanged.
+- **Gameplay:** the black hole remains dangerous within its current event horizon, attracts rocks/projectiles and can be escaped by thrusting from farther away. The new artwork has a larger visual footprint, but the gravity and collision logic is intentionally unchanged.
+
 ## v0.11.1 — Rock-impact and glass telemetry refinement
 
 - **Dry rock sounds:** the old pitched two-tone fracture is replaced with several time-shaped filtered-noise bands: a brief brittle snap, low-mid impact, rough crumbling debris, and a quieter second crack. Small, medium and large rocks use different durations and body emphasis. Nonfatal rock hits now use a short noise crack too. The intent is stone breaking apart, not metallic resonance; sound character should be judged with speakers or headphones.
