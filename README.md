@@ -1,60 +1,70 @@
 # Vector Drift
 
-An original, native macOS arcade space shooter inspired by classic vector games. This is not affiliated with Atari.
+A native macOS arcade space shooter with two independent presentation modes: **Classic** monochrome vectors and **Modern Vector** with original procedural effects. Not affiliated with Atari.
 
 ## Build
 
-Requires Xcode 16+ and macOS 13+. Open `VectorDrift.xcodeproj`, select **My Mac**, and press **Command-R**. No third-party dependencies or external assets.
+Requires macOS 13+ and Xcode 16+. Open `VectorDrift.xcodeproj`, select **My Mac**, and press **Command-R**. For an unsigned command-line build:
+
+```bash
+xcodebuild -project VectorDrift.xcodeproj -scheme VectorDrift -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO build
+```
+
+A GitHub Actions macOS build runs on pushes to `main` and pull requests. This is an early prototype; gameplay still needs local testing.
 
 ## Controls
 
-- Left / right arrows: rotate
-- Up arrow: thrust (momentum continues when released)
-- Space: fire
-- Down arrow: hyperspace (cooldown)
-- P: pause or resume
-- R or Command-R: restart
+| Input | Action |
+| --- | --- |
+| Return | Begin playing from title screen; restart after game over |
+| Left / right arrows | Rotate |
+| Up arrow | Thrust |
+| Space | Fire |
+| **S** | Toggle shield on/off, using a limited energy budget |
+| Down arrow | Hyperspace (cooldown varies by difficulty) |
+| P | Pause/resume |
+| R or Command-R | Restart |
+| Toolbar | Choose graphics, difficulty, toggle sound, see scores |
 
-Click the playfield to focus keyboard input.
+Click inside the playfield for keyboard focus.
 
-## Included in v0.2
+## v0.3 features
 
-- Native SwiftUI window and SpriteKit playfield
-- Switchable Classic monochrome and enhanced Modern Vector rendering
-- Modern mode: procedural stars, subtle nebulae, faceted asteroids with craters, engine flame and glowing particles
-- Modern mode: occasional high-speed comet (from wave 2), glowing particle tail and expanding area-damage shockwave
-- Comet hits give 750 points plus bonuses for rocks destroyed by the shockwave
-- Classic ship collision: short yellow flash and flying ship-outline fragments; Modern gets enhanced debris
-- Procedural, original rock outlines; three sizes; splitting
-- Momentum, projectile firing, screen wrapping, wave progression
-- Bullet range, firing rate, respawn protection and hyperspace cooldown scale with selected difficulty
-- Three lives, collision protection, hyperspace, scoring, persisted high score
-- Local graphics and difficulty preferences (changing difficulty starts a new game)
-- Three difficulties: Easy (5 lives, 0.75× asteroid speed), Medium (3 lives, 1×), Hard (2 lives, 1.32×)
-- Size-based asteroid velocity: large slow, medium faster, small fastest; waves gradually accelerate
+- Two graphics modes, with distinct procedural graphics and effects
+- Three difficulty settings independent of graphics mode
+- Finite shields available in *both* modes. Toggle with S and save remaining energy by turning them off. Energy replenishes at the start of each wave.
+- Large, medium, and small asteroids move at different speeds; waves gradually accelerate
+- On **Hard from wave 2**, giant slow-moving asteroids require two hits. The first reveals yellow/orange damage cracks **without shrinking the asteroid**. The second breaks it into smaller asteroids.
+- Comet special events in Modern and, on Hard, Classic; Hard comet intervals are much shorter
+- Comet shot creates an expanding asteroid-clearing shockwave and a 750-point bonus
+- Enemy UFO saucers with aimed shots, more accurate and frequent on Hard
+- Original procedural arcade sounds, user-controllable sound toggle
+- Title screen and persistent local top-five scores per difficulty
+- Classic yellow ship-death flash and flying fragments; Modern includes brighter debris effects
+- Visible difficulty and graphics buttons with an explicit selected state
 
-## Difficulty tuning
+## Difficulty
 
-| Setting | Easy | Medium | Hard |
+| Rule | Easy | Medium | Hard |
 | --- | --- | --- | --- |
-| Starting lives | 5 | 3 | 2 |
-| Asteroid speed multiplier | 0.75× | 1.0× | 1.32× |
-| Starting large asteroids | 3 | 4 | 5 |
-| Bullet lifetime (range) | 1.50 s | 0.95 s | 0.55 s |
-| Time between shots | 0.13 s | 0.16 s | 0.20 s |
+| Lives | 5 | 3 | 2 |
+| Asteroid speed | 0.75× | 1× | 1.32× |
+| Beginning large asteroids | 3 | 4 | 5 |
+| Bullet lifetime | 1.5 s | 0.95 s | 0.55 s |
+| Minimum time between shots | 0.13 s | 0.16 s | 0.20 s |
 | Respawn protection | 3 s | 2 s | 1.25 s |
 | Hyperspace cooldown | 3 s | 4.5 s | 7 s |
+| **Shield energy per wave** | **7 s** | **5 s** | **3 s** |
+| Comet interval | 15–23 s | 11–18 s | 5–9 s |
+| UFO interval | 27–35 s | 19–27 s | 12–19 s |
+| Giant 2-hit asteroids | No | No | Yes, from wave 2 |
 
-Difficulty is independent of the graphics mode. Switching difficulty starts a new game.
+Comet and UFO spawns begin in wave 2. Classic mode only gets comet events on Hard. Switching difficulty starts a new game.
 
-## Roadmap
+## Future improvements
 
-UFO opponents, custom synthesized sounds, gamepad input, animation polish, settings, separate difficulty leaderboards, tests, original branding, code signing and notarization.
+Modern Vector is still a procedural 2D look. Planned polish: detailed animated asteroid surfaces, parallax starfield, more varied particle fields, hit-stop/shake, heat and glow compositing, environmental hazards, controller support, full sound design, and public-release packaging.
 
-## Rights and distribution
+## Licensing and release
 
-The source code is licensed under the repository's MIT License. The name Vector Drift has not been cleared for trademark use. All graphics are drawn procedurally without copying original Atari game code, audio, or assets. Review branding and creative similarity before public game distribution.
-
-## Build status
-
-v0.2 source changes pushed. The macOS SpriteKit build and gameplay have not been validated in this environment; please build locally in Xcode and report any compiler/runtime problems before public releases.
+Code is MIT licensed. Game name has not been cleared for trademark use. Art and generated audio are original implementations rather than copied Atari assets. Before public binary distribution, verify branding, art similarity, signing, and notarization.
