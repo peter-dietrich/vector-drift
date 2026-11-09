@@ -15,7 +15,7 @@ enum TelescopeSkyLibrary {
 
         var cacheName: String {
             switch self {
-            case .cosmicCliffs: return "webb-cosmic-cliffs-v1.jpg"
+            case .cosmicCliffs: return "webb-cosmic-cliffs-4k-v1.png"
             case .orionNebula: return "hubble-orion-nebula-v1.jpg"
             }
         }
@@ -24,7 +24,7 @@ enum TelescopeSkyLibrary {
             let value: String
             switch self {
             case .cosmicCliffs:
-                value = "https://svs.gsfc.nasa.gov/vis/a030000/a031200/a031285/eta-carina-cliffs-webb-STScI-01G8GX1KMWX2XA4PK2EWM7KE3R-hw_resolution_print.jpg"
+                value = "https://svs.gsfc.nasa.gov/vis/a030000/a031200/a031285/eta-carina-cliffs-webb-STScI-01G8GX1KMWX2XA4PK2EWM7KE3R-hw_resolution.png"
             case .orionNebula:
                 value = "https://svs.gsfc.nasa.gov/vis/a010000/a012000/a012086/c-1280.jpg"
             }
@@ -59,7 +59,7 @@ enum TelescopeSkyLibrary {
         }
 
         var request = URLRequest(url: plate.sourceURL)
-        request.timeoutInterval = 16
+        request.timeoutInterval = 28
         request.cachePolicy = .returnCacheDataElseLoad
         URLSession.shared.dataTask(with: request) { data, response, error in
             guard error == nil,
@@ -67,7 +67,7 @@ enum TelescopeSkyLibrary {
                   (200...299).contains(http.statusCode),
                   let data,
                   data.count > 15_000,
-                  data.count < 8_000_000,
+                  data.count < 18_000_000,
                   let image = NSImage(data: data) else {
                 DispatchQueue.main.async { completion(nil) }
                 return
