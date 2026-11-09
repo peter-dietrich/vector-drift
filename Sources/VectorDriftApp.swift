@@ -552,6 +552,14 @@ final class DriftScene: SKScene {
     private let rightHeading = SKLabelNode(fontNamed: "Menlo-Bold")
     private let leftFootnote = SKLabelNode(fontNamed: "Menlo")
     private let rightFootnote = SKLabelNode(fontNamed: "Menlo")
+    private let scoreCaption = SKLabelNode(fontNamed: "Menlo")
+    private let waveCaption = SKLabelNode(fontNamed: "Menlo")
+    private let waveValue = SKLabelNode(fontNamed: "Menlo-Bold")
+    private let beltCaption = SKLabelNode(fontNamed: "Menlo")
+    private let beltValue = SKLabelNode(fontNamed: "Menlo-Bold")
+    private let difficultyReadout = SKLabelNode(fontNamed: "Menlo")
+    private let telemetryRuleOne = SKShapeNode(rectOf: CGSize(width: 210, height: 0.7))
+    private let telemetryRuleTwo = SKShapeNode(rectOf: CGSize(width: 210, height: 0.7))
     private let stageHeading = SKLabelNode(fontNamed: "Menlo-Bold")
     private let stageCaption = SKLabelNode(fontNamed: "Menlo")
     private let stagePanel = SKShapeNode(rectOf: CGSize(width: 398, height: 108), cornerRadius: 8)
@@ -567,46 +575,70 @@ final class DriftScene: SKScene {
         ship.addChild(modernShipDetail)
         ship.addChild(flame)
         ship.addChild(shieldNode)
-        for panel in [leftPanel, rightPanel] {
-            panel.zPosition = 85
-            panel.fillColor = SKColor(calibratedRed: 0.035, green: 0.085, blue: 0.13, alpha: 0.12)
-            panel.strokeColor = SKColor(calibratedRed: 0.60, green: 0.71, blue: 0.81, alpha: 0.20)
-            panel.lineWidth = 0.55
-            addChild(panel)
+        // A single right-side telemetry column, inspired by scientific
+        // simulation readouts rather than two horizontal score banners.
+        leftPanel.isHidden = true
+        leftAccent.isHidden = true
+        rightPanel.zPosition = 85
+        rightPanel.fillColor = SKColor(calibratedRed: 0.035, green: 0.085, blue: 0.13, alpha: 0.13)
+        rightPanel.strokeColor = SKColor(calibratedWhite: 0.81, alpha: 0.17)
+        rightPanel.lineWidth = 0.55
+        addChild(rightPanel)
+        rightAccent.zPosition = 87
+        rightAccent.strokeColor = .clear
+        rightAccent.fillColor = SKColor(calibratedRed: 1, green: 0.65, blue: 0.29, alpha: 0.61)
+        addChild(rightAccent)
+        for rule in [telemetryRuleOne, telemetryRuleTwo] {
+            rule.zPosition = 88
+            rule.fillColor = SKColor(calibratedWhite: 0.81, alpha: 0.18)
+            rule.strokeColor = .clear
+            addChild(rule)
         }
-        for accent in [leftAccent, rightAccent] {
-            accent.zPosition = 87
-            accent.strokeColor = .clear
-            accent.fillColor = SKColor(calibratedRed: 1.0, green: 0.64, blue: 0.28, alpha: 0.54)
-            addChild(accent)
+        let telemetryLabels = [
+            leftHeading, scoreCaption, hud, leftFootnote,
+            waveCaption, waveValue, beltCaption, beltValue,
+            rightHeading, statusHUD, rightFootnote, difficultyReadout
+        ]
+        for label in telemetryLabels {
+            label.zPosition = 90
+            label.horizontalAlignmentMode = .left
+            label.verticalAlignmentMode = .top
+            addChild(label)
         }
-        for label in [leftHeading, rightHeading, leftFootnote, rightFootnote, stageHeading, stageCaption] {
+        for label in [stageHeading, stageCaption] {
             label.zPosition = 90
             addChild(label)
         }
-        for label in [leftHeading, rightHeading, stageHeading] {
-            label.fontSize = 8.5
-            label.fontColor = SKColor(calibratedRed: 1.0, green: 0.72, blue: 0.40, alpha: 0.91)
+        let amber = SKColor(calibratedRed: 1.0, green: 0.72, blue: 0.40, alpha: 0.92)
+        let muted = SKColor(calibratedWhite: 0.79, alpha: 0.94)
+        for label in [leftHeading, rightHeading] {
+            label.fontSize = 9
+            label.fontColor = amber
         }
-        leftHeading.text = "FLIGHT   //   TELEMETRY"
-        rightHeading.text = "SYSTEMS   //   COMBAT"
+        for label in [scoreCaption, waveCaption, beltCaption] {
+            label.fontSize = 9
+            label.fontColor = muted
+        }
+        leftHeading.text = "VECTOR DRIFT  //  TELEMETRY"
+        scoreCaption.text = "CURRENT SCORE"
+        waveCaption.text = "CURRENT WAVE"
+        beltCaption.text = "BELT DENSITY"
+        rightHeading.text = "COMBAT SYSTEMS"
         stageHeading.text = "VECTOR DRIFT   //   FLIGHT SIM"
-        leftFootnote.fontSize = 9
-        rightFootnote.fontSize = 9
+        hud.fontSize = 30
+        leftFootnote.fontSize = 11
+        waveValue.fontSize = 29
+        beltValue.fontSize = 24
+        statusHUD.fontSize = 15
+        rightFootnote.fontSize = 11
+        difficultyReadout.fontSize = 10
+        for label in [leftFootnote, rightFootnote, difficultyReadout] {
+            label.fontColor = muted
+        }
+        stageHeading.fontSize = 8.5
+        stageHeading.fontColor = amber
         stageCaption.fontSize = 10
-        leftFootnote.fontColor = SKColor(calibratedWhite: 0.78, alpha: 0.95)
-        rightFootnote.fontColor = SKColor(calibratedWhite: 0.78, alpha: 0.95)
         stageCaption.fontColor = SKColor(calibratedWhite: 0.85, alpha: 1)
-        hud.fontSize = 19
-        hud.horizontalAlignmentMode = .left
-        hud.verticalAlignmentMode = .top
-        hud.zPosition = 90
-        addChild(hud)
-        statusHUD.fontSize = 18
-        statusHUD.horizontalAlignmentMode = .right
-        statusHUD.verticalAlignmentMode = .top
-        statusHUD.zPosition = 90
-        addChild(statusHUD)
         stagePanel.zPosition = 80
         stagePanel.fillColor = SKColor(calibratedRed: 0.035, green: 0.085, blue: 0.13, alpha: 0.22)
         stagePanel.strokeColor = ModernVisuals.ice.withAlphaComponent(0.23)
@@ -628,27 +660,48 @@ final class DriftScene: SKScene {
 
     override func didChangeSize(_ oldSize: CGSize) {
         backgroundLayer?.resize(to: size)
-        let inset: CGFloat = 15
-        let panelWidth: CGFloat = min(304, max(215, (size.width - 52) / 2))
-        let panelHeight: CGFloat = 76
-        let panelY = size.height - 54
-        let leftX = inset + panelWidth / 2
-        let rightX = size.width - inset - panelWidth / 2
-        for (panel, x) in [(leftPanel, leftX), (rightPanel, rightX)] {
-            panel.position = CGPoint(x: x, y: panelY)
-            panel.path = CGPath(roundedRect: CGRect(
-                x: -panelWidth/2, y: -panelHeight/2,
-                width: panelWidth, height: panelHeight),
-                cornerWidth: 7, cornerHeight: 7, transform: nil)
+        let inset: CGFloat = 14
+        let columnWidth: CGFloat = min(252, max(196, size.width * 0.235))
+        let layoutScale = min(CGFloat(1), max(CGFloat(0.72), (size.height - 32) / 440))
+        let columnHeight: CGFloat = 418 * layoutScale
+        let topY = size.height - 15
+        let leftX = size.width - inset - columnWidth
+        let textX = leftX + 17
+        rightPanel.path = CGPath(roundedRect: CGRect(
+            x: -columnWidth / 2, y: -columnHeight / 2,
+            width: columnWidth, height: columnHeight),
+            cornerWidth: 8, cornerHeight: 8, transform: nil)
+        rightPanel.position = CGPoint(x: leftX + columnWidth / 2,
+                                      y: topY - columnHeight / 2)
+        rightAccent.path = CGPath(rect: CGRect(
+            x: -1, y: -(columnHeight - 22) / 2,
+            width: 2, height: columnHeight - 22), transform: nil)
+        rightAccent.position = CGPoint(x: leftX + 5,
+                                       y: topY - columnHeight / 2)
+
+        func put(_ label: SKLabelNode, _ offset: CGFloat) {
+            label.position = CGPoint(x: textX, y: topY - offset * layoutScale)
+            label.setScale(layoutScale)
         }
-        leftAccent.position = CGPoint(x: inset + 4, y: panelY)
-        rightAccent.position = CGPoint(x: size.width - inset - 4, y: panelY)
-        leftHeading.position = CGPoint(x: inset + 14, y: size.height - 31)
-        hud.position = CGPoint(x: inset + 14, y: size.height - 45)
-        leftFootnote.position = CGPoint(x: inset + 14, y: size.height - 79)
-        rightHeading.position = CGPoint(x: size.width - inset - 14, y: size.height - 31)
-        statusHUD.position = CGPoint(x: size.width - inset - 14, y: size.height - 45)
-        rightFootnote.position = CGPoint(x: size.width - inset - 14, y: size.height - 79)
+        put(leftHeading, 19)
+        put(scoreCaption, 54)
+        put(hud, 69)
+        put(leftFootnote, 112)
+        put(waveCaption, 157)
+        put(waveValue, 172)
+        put(beltCaption, 230)
+        put(beltValue, 246)
+        put(rightHeading, 307)
+        put(statusHUD, 328)
+        put(rightFootnote, 361)
+        put(difficultyReadout, 391)
+        for (rule, offset) in [(telemetryRuleOne, CGFloat(140)),
+                               (telemetryRuleTwo, CGFloat(289))] {
+            rule.path = CGPath(rect: CGRect(
+                x: 0, y: 0, width: columnWidth - 34, height: 0.7), transform: nil)
+            rule.position = CGPoint(x: textX, y: topY - offset * layoutScale)
+            rule.xScale = 1
+        }
         message.position = CGPoint(x: size.width / 2, y: size.height / 2 + 1)
         stageHeading.position = CGPoint(x: size.width / 2, y: size.height / 2 + 31)
         stageCaption.position = CGPoint(x: size.width / 2, y: size.height / 2 - 31)
@@ -1284,11 +1337,12 @@ final class DriftScene: SKScene {
     }
 
     private func updateHud() {
-        hud.text = String(format: "SCORE %06d", score)
-        let density = modern ? Int((beltDensity(at: elapsed) * 100).rounded()) : 0
-        leftFootnote.text = modern
-            ? String(format: "BEST %06d   WAVE %02d   BELT %02d%%", high, wave, density)
-            : String(format: "BEST %06d   WAVE %02d   CLASSIC", high, wave)
+        hud.text = String(format: "%06d", score)
+        leftFootnote.text = String(format: "BEST  %06d", high)
+        waveValue.text = String(format: "%02d", wave)
+        let density = Int((beltDensity(at: elapsed) * 100).rounded())
+        beltCaption.text = modern ? "BELT DENSITY" : "FLIGHT PROFILE"
+        beltValue.text = modern ? String(format: "%02d%%", density) : "CLASSIC"
         let shieldStatus: String
         if shieldActive {
             shieldStatus = String(format: "SHIELD %.1fs", shieldEnergy)
@@ -1297,9 +1351,10 @@ final class DriftScene: SKScene {
         } else {
             shieldStatus = "SHIELD READY [S]"
         }
-        statusHUD.text = String(format: "LIVES %02d   NUKES %02d", lives, missilesRemaining)
-        rightFootnote.text = difficulty.title.uppercased() + "   " + shieldStatus +
-            (nuclearMissile == nil ? "" : "   ·   MISSILE AWAY")
+        statusHUD.text = String(format: "%02d LIVES  ·  %02d NUKES", lives, missilesRemaining)
+        rightFootnote.text = shieldStatus
+        difficultyReadout.text = "MODE  " + difficulty.title.uppercased() +
+            (nuclearMissile == nil ? "" : "  ·  MISSILE AWAY")
     }
 
     private func updateStyle() {
@@ -1319,14 +1374,14 @@ final class DriftScene: SKScene {
         stagePanel.strokeColor = modern
             ? SKColor(calibratedRed: 0.94, green: 0.72, blue: 0.44, alpha: 0.25)
             : SKColor(calibratedWhite: 0.92, alpha: 0.24)
-        for panel in [leftPanel, rightPanel] {
-            panel.fillColor = modern
-                ? SKColor(calibratedRed: 0.035, green: 0.085, blue: 0.13, alpha: 0.12)
-                : SKColor(calibratedWhite: 0.08, alpha: 0.14)
-            panel.strokeColor = modern
-                ? SKColor(calibratedRed: 0.84, green: 0.68, blue: 0.44, alpha: 0.20)
-                : SKColor(calibratedWhite: 0.8, alpha: 0.18)
-        }
+        rightPanel.fillColor = modern
+            ? SKColor(calibratedRed: 0.035, green: 0.085, blue: 0.13, alpha: 0.13)
+            : SKColor(calibratedWhite: 0.08, alpha: 0.12)
+        rightPanel.strokeColor = modern
+            ? SKColor(calibratedRed: 0.84, green: 0.68, blue: 0.44, alpha: 0.19)
+            : SKColor(calibratedWhite: 0.8, alpha: 0.16)
+        waveValue.fontColor = color
+        beltValue.fontColor = color
         for rock in boulders {
             styleRock(rock.node, detail: rock.detail)
             rock.surface.isHidden = !modern
