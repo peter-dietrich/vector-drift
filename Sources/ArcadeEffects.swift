@@ -104,7 +104,10 @@ enum ArcadeEffects {
 /// Lightweight procedurally generated arcade tones, played only when enabled.
 /// The engine owns the player node and keeps a bounded number of queued samples.
 final class ArcadeAudio {
-    enum Effect { case fire, rock, shield, bounce, comet, nuclear, ship, saucer, wave }
+    enum Effect {
+        case fire, rock, rockBurstSmall, rockBurstMedium, rockBurstLarge
+        case shield, bounce, comet, nuclear, ship, saucer, wave
+    }
     static let shared = ArcadeAudio()
     var enabled = true {
         didSet { if !enabled { stopThrust() } }
@@ -181,8 +184,65 @@ final class ArcadeAudio {
         return buffer
     }
 
+    /// Breaking a rock is different from damaging its shell. Its size determines
+    /// the depth of the cracking thud, while each burst gets subtle variation.
+    func playRockBreak(level: Int) {
+        let effect: Effect = level <= 2 ? .rockBurstSmall :
+                             level == 3 ? .rockBurstMedium : .rockBurstLarge
+        play(effect)
+    }
+
+    private func playRockBreakSample(_ effect: Effect) {
+        let scale: Double
+        switch effect {
+        case .rockBurstSmall: scale = 0.65
+        case .rockBurstMedium: scale = 1.0
+        case .rockBurstLarge: scale = 1.45
+        default: return
+        }
+        let duration = 0.19 + scale * 0.16
+        let frames = AVAudioFrameCount(duration * format.sampleRate)
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames),
+              let samples = buffer.floatChannelData?.pointee else { return }
+        buffer.frameLength = frames
+
+        let variation = Double.random(in: 0.90...1.10)
+        let crackFrequency = (640 / scale) * variation
+        let bassFrequency = (135 / scale) * variation
+        var gritFiltered: Double = 0
+        var lastGrit: Double = 0
+        for index in 0..<Int(frames) {
+            let t = Double(index) / format.sampleRate
+            let progress = t / duration
+            let grit = Double.random(in: -1...1)
+            // Short brittle fracture, low-end impact and a gritty falling tail.
+            gritFiltered = gritFiltered * 0.75 + grit * 0.25
+            let sharp = (grit - lastGrit) * exp(-t * (49 / scale))
+            let fracture = sin(2 * .pi * crackFrequency * t) *
+                           exp(-t * (33 / scale))
+            let thud = sin(2 * .pi * bassFrequency * t) *
+                       exp(-t * (13 / scale))
+            let debris = gritFiltered * exp(-t * (8 / scale))
+            let microCrack = sin(2 * .pi * crackFrequency * 1.63 * t) *
+                             exp(-abs(t - 0.058 * scale) * 90) * 0.15
+            let envelope = min(1, t * 420) * pow(max(0, 1 - progress), 0.75)
+            let sample = (sharp * 0.31 + fracture * 0.17 +
+                          thud * 0.45 + debris * 0.38 + microCrack) *
+                          envelope * 0.42
+            samples[index] = Float(max(-1, min(1, sample)))
+            lastGrit = grit
+        }
+        player.scheduleBuffer(buffer, completionHandler: nil)
+    }
+
     func play(_ effect: Effect) {
         guard enabled && ensureEngine() else { return }
+        switch effect {
+        case .rockBurstSmall, .rockBurstMedium, .rockBurstLarge:
+            playRockBreakSample(effect)
+            return
+        default: break
+        }
 
         let duration: Double
         let f0: Double
@@ -190,7 +250,9 @@ final class ArcadeAudio {
         let noise: Float
         switch effect {
         case .fire: duration = 0.07; f0 = 780; f1 = 230; noise = 0.08
-        case .rock: duration = 0.19; f0 = 160; f1 = 52; noise = 0.44
+        case .rock: duration = 0.12; f0 = 470; f1 = 120; noise = 0.50
+        case .rockBurstSmall, .rockBurstMedium, .rockBurstLarge:
+            return // Handled by the layered rock fracture synthesizer.
         case .shield: duration = 0.22; f0 = 350; f1 = 870; noise = 0.02
         case .bounce: duration = 0.16; f0 = 260; f1 = 710; noise = 0.05
         case .comet: duration = 0.58; f0 = 240; f1 = 38; noise = 0.25
