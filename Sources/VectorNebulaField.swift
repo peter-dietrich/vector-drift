@@ -110,6 +110,13 @@ final class VectorNebulaField: SKNode {
             let beltBoost: CGFloat = index == 5 ? 0.5 + currentDensity * 0.65 : 1
             for tile in layer.tiles {
                 tile.alpha = layer.baseOpacity * breath * beltBoost
+                if !layer.tiled {
+                    // GPU-safe morphing using SpriteKit transforms rather than
+                    // a fullscreen fragment shader that could fail to render.
+                    tile.xScale = 1 + 0.025 * sin(time * 0.12 + phase)
+                    tile.yScale = 1 + 0.025 * cos(time * 0.10 + phase)
+                    tile.zRotation = 0.009 * sin(time * 0.055 + phase)
+                }
             }
         }
         if lensLocation != nil { updateLens() }
@@ -246,7 +253,11 @@ final class VectorNebulaField: SKNode {
                                       y: sceneSize.height / 2)
             sprite.zPosition = depth
             sprite.alpha = opacity
-            sprite.shader = shader
+            // Use direct SKTexture rendering by default. The earlier custom
+            // fragment shader could fail to draw on certain Macs, resulting in
+            // a white/blank starfield after launch or mode switching. Keep the
+            // shader source available for future validated lensing work.
+            sprite.shader = nil
             sprite.blendMode = depth == -17 ? .alpha : .add
             backdropGroup?.addChild(sprite)
 
