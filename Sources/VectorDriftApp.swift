@@ -19,7 +19,7 @@ private enum Look: String, CaseIterable, Identifiable {
     var title: String { self == .classic ? "Classic" : "Modern Vector" }
 }
 
-private enum Difficulty: String, CaseIterable, Identifiable {
+fileprivate enum Difficulty: String, CaseIterable, Identifiable {
     case easy, medium, hard
     var id: String { rawValue }
     var title: String { rawValue.capitalized }
