@@ -24,7 +24,9 @@ Click the playfield to focus keyboard input.
 - Procedural, original rock outlines; three sizes; splitting
 - Momentum, projectile firing, screen wrapping, wave progression
 - Three lives, collision protection, hyperspace, scoring, persisted high score
-- Local graphics preference
+- Local graphics and difficulty preferences (changing difficulty starts a new game)
+- Three difficulties: Easy (5 lives, 0.75× asteroid speed), Medium (3 lives, 1×), Hard (2 lives, 1.32×)
+- Size-based asteroid velocity: large slow, medium faster, small fastest; waves gradually accelerate
 
 ## Roadmap
 
