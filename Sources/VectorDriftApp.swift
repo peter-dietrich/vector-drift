@@ -14,9 +14,15 @@ struct VectorDriftApp: App {
 }
 
 private enum Look: String, CaseIterable, Identifiable {
-    case classic, modern
+    case classic, modern, flight3D
     var id: String { rawValue }
-    var title: String { self == .classic ? "Classic" : "Modern Vector" }
+    var title: String {
+        switch self {
+        case .classic: return "Classic"
+        case .modern: return "Modern"
+        case .flight3D: return "3D Flight"
+        }
+    }
 }
 
 fileprivate enum Difficulty: String, CaseIterable, Identifiable {
@@ -154,6 +160,11 @@ private struct GameWindow: View {
     @AppStorage("difficulty") private var difficulty = Difficulty.medium.rawValue
     @AppStorage("soundEnabled") private var soundEnabled = true
     @State private var showScores = false
+    @State private var showPreferences = false
+    @State private var showSavedGames = false
+    @State private var activePresetID = ""
+    @State private var savedGames: [GameSaveSlot] = []
+    @State private var flight = Flight3DGame()
     @State private var game: DriftScene = {
         let scene = DriftScene(size: CGSize(width: 1080, height: 670))
         scene.scaleMode = .resizeFill
@@ -173,6 +184,16 @@ private struct GameWindow: View {
                             .foregroundStyle(.cyan.opacity(0.7))
                     }
                     Spacer()
+                    Button("Custom Game") { showPreferences = true }
+                    Button("Save Game") {
+                        if let snapshot = game.makeSnapshot(activePresetID: activePresetID) {
+                            _ = GameStore.saveGame(snapshot)
+                        }
+                    }
+                    Button("Resume") {
+                        savedGames = GameStore.saves()
+                        showSavedGames = true
+                    }
                     Toggle("Sound", isOn: $soundEnabled)
                         .toggleStyle(.checkbox)
                     Button("Scores") { showScores = true }
@@ -210,7 +231,7 @@ private struct GameWindow: View {
                             .buttonStyle(.plain)
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(mode == look.rawValue ? Color.black : Color.white)
-                            .frame(width: look == .classic ? 66 : 116, height: 28)
+                            .frame(width: look == .classic ? 66 : 90, height: 28)
                             .background(mode == look.rawValue
                                         ? Color.cyan : Color(white: 0.28))
                             .clipShape(RoundedRectangle(cornerRadius: 6))
@@ -223,10 +244,18 @@ private struct GameWindow: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 10)
             .background(Color(white: 0.09))
-            GameView(scene: game)
-                .background(.black)
+            Group {
+                if mode == Look.flight3D.rawValue {
+                    Flight3DView(game: flight)
+                } else {
+                    GameView(scene: game)
+                }
+            }
+            .background(.black)
             HStack {
-                Text("← → Rotate    ↑ Thrust    Space Fire    S Shield    ↓ Warp    P Pause    R Restart")
+                Text(mode == Look.flight3D.rawValue
+                    ? "3D: ← → Yaw  I K Pitch  Q E Roll  W X Rise/Dive  A D Strafe  ↑ Thrust  ↓ Reverse  Space Fire  S Shield  N Missile"
+                    : "← → Rotate  ↑ Thrust  Space Fire  S Shield  N Missile  ↓ Warp  P Pause  R Restart")
                 Spacer()
                 Text("Click playfield for keyboard focus")
             }
@@ -238,9 +267,58 @@ private struct GameWindow: View {
         .onAppear {
             game.modern = mode == Look.modern.rawValue
             game.difficulty = Difficulty(rawValue: difficulty) ?? .medium
+            flight.difficulty = difficulty
+            flight.soundEnabled = soundEnabled
             ArcadeAudio.shared.enabled = soundEnabled
         }
-        .onChange(of: soundEnabled) { ArcadeAudio.shared.enabled = $0 }
+        .onChange(of: soundEnabled) {
+            ArcadeAudio.shared.enabled = $0
+            flight.soundEnabled = $0
+        }
+        .sheet(isPresented: $showPreferences) {
+            GamePresetEditor(baseDifficulty: difficulty, activePresetID: activePresetID) { preset in
+                activePresetID = preset?.id ?? ""
+                game.customRules = preset?.rules
+                flight.customRules = preset?.rules
+                game.restart()
+            }
+        }
+        .sheet(isPresented: $showSavedGames) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("SAVED GAMES").font(.title2.monospaced().bold())
+                if savedGames.isEmpty {
+                    Text("No saved 2D games yet. Start playing, then choose Save Game.")
+                        .foregroundStyle(.secondary)
+                }
+                ScrollView {
+                    ForEach(savedGames) { slot in
+                        HStack {
+                            VStack(alignment: .leading) {
+                                Text(slot.name).font(.headline)
+                                Text(slot.savedAt.formatted()).font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button("Resume") {
+                                let snapshot = slot.snapshot
+                                mode = snapshot.modern ? Look.modern.rawValue : Look.classic.rawValue
+                                difficulty = snapshot.difficulty
+                                activePresetID = snapshot.activePresetID
+                                // Allow SwiftUI's difficulty change handler to finish first.
+                                DispatchQueue.main.async { game.restore(snapshot) }
+                                showSavedGames = false
+                            }
+                            Button("Delete", role: .destructive) {
+                                GameStore.deleteGame(id: slot.id)
+                                savedGames = GameStore.saves()
+                            }
+                        }
+                        Divider()
+                    }
+                }
+                Button("Close") { showSavedGames = false }
+            }
+            .padding(24).frame(width: 550, height: 450)
+        }
         .sheet(isPresented: $showScores) {
             VStack(alignment: .leading, spacing: 14) {
                 Text("LOCAL HIGH SCORES").font(.title2.monospaced().bold())
@@ -262,9 +340,16 @@ private struct GameWindow: View {
             .padding(26)
             .frame(minWidth: 360)
         }
-        .onChange(of: mode) { value in game.modern = value == Look.modern.rawValue }
+        .onChange(of: mode) { value in
+            game.modern = value == Look.modern.rawValue
+            if value == Look.flight3D.rawValue { game.clearKeys() }
+        }
         .onChange(of: difficulty) { value in
             game.difficulty = Difficulty(rawValue: value) ?? .medium
+            flight.difficulty = value
+            activePresetID = ""
+            game.customRules = nil
+            flight.customRules = nil
             game.restart()
         }
     }
@@ -362,6 +447,7 @@ private struct NuclearMissile {
 final class DriftScene: SKScene {
     var modern = false { didSet { updateStyle() } }
     fileprivate var difficulty: Difficulty = .medium
+    var customRules: GameRules?
     private var boulders: [Boulder] = []
     private var lasers: [Laser] = []
     private var comet: Comet?
@@ -467,7 +553,7 @@ final class DriftScene: SKScene {
         boulders.removeAll()
         lasers.removeAll()
         held.removeAll()
-        score = 0; lives = difficulty.startingLives; wave = 1
+        score = 0; lives = customRules?.startingLives ?? difficulty.startingLives; wave = 1
         elapsed = 0; lastTime = 0; lastFire = -2; lastWarp = -10
         stopped = false; over = false
         titleVisible = false
@@ -594,7 +680,9 @@ final class DriftScene: SKScene {
                                         y: ship.position.y + velocity.dy * dt), margin: 15)
         ship.alpha = elapsed < protectedUntil && Int(elapsed * 10).isMultiple(of: 2) ? 0.25 : 1
 
-        if held.contains(49) && elapsed - lastFire > difficulty.shootCooldown && lasers.count < 6 {
+        if held.contains(49) &&
+            elapsed - lastFire > CGFloat(customRules?.shotInterval ?? Double(difficulty.shootCooldown)) &&
+            lasers.count < (customRules?.maxBullets ?? 6) {
             lastFire = elapsed
             ArcadeAudio.shared.play(.fire)
             let bullet = SKShapeNode(circleOfRadius: 2)
@@ -605,7 +693,7 @@ final class DriftScene: SKScene {
             lasers.append(Laser(node: bullet,
                                 velocity: CGVector(dx: velocity.dx + forward.dx * 540,
                                                    dy: velocity.dy + forward.dy * 540),
-                                remaining: difficulty.bulletLifetime))
+                                remaining: CGFloat(customRules?.bulletLifetime ?? Double(difficulty.bulletLifetime))))
         }
 
         for i in boulders.indices {
