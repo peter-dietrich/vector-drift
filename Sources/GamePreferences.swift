@@ -3,14 +3,21 @@ import SwiftUI
 
 // All modes share this ammunition reserve. "Max Bullets" in custom rules
 // continues to cap simultaneously active projectiles; it is separate from
-// the 1,000-round consumable magazine.
+// the 500-round consumable magazine.
 struct AmmoReserve: Codable {
-    static let capacity = 1000
+    static let capacity = 500
     static let refillDelay: CGFloat = 5
     static let refillRate: CGFloat = 100 // rounds per second after idle delay
 
     var rounds = capacity
     var partialRound: CGFloat = 0
+
+    // Legacy save slots can contain up to 1,000 rounds; clamp them to today's
+    // magazine size when restoring, rather than carrying extra ammunition.
+    mutating func normalize() {
+        rounds = max(0, min(Self.capacity, rounds))
+        partialRound = max(0, min(0.999, partialRound))
+    }
 
     mutating func fire() -> Bool {
         guard rounds > 0 else { return false }
