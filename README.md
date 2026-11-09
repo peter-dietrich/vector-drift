@@ -24,13 +24,20 @@ A GitHub Actions macOS build runs on pushes to `main` and pull requests. This is
 | Space | Fire |
 | **S** | Activate or end a reusable shield; it recharges automatically |
 | Down arrow | Hyperspace (cooldown varies by difficulty) |
-| **N** | Launch a drifting thermonuclear area missile (default 2 per wave) |
+| **N** | Launch a forward-flying nuclear missile (default 2 per wave); avoid being near its detonation |
 | P | Pause/resume |
 | Hold Up arrow | Continuous engine-thrust rumble while accelerating |
 | R or Command-R | Restart |
 | Toolbar | Switch Classic / Modern / 3D Flight, choose difficulty, Custom Game, Save Game, Resume, sound and scores |
 
 Click inside the playfield for keyboard focus. In **3D Flight**, left/right arrows yaw, **I/K** pitch, **Q/E** roll, **W/X** rise/dive, **A/D** strafe; Up thrusts forward and Down reverses. Space fires, S shields and N launches a missile.
+
+## v0.11 — Safer nuclear launch, rocky breakups, telemetry HUD
+
+- **Nuke launch tuning:** the 2D missile launches 35 points beyond the ship and travels about 295 points/second (plus 65% of the ship's own velocity), with a 2.0-second fuse and far less drag. Its large-area blast still clears nearby rocks and enemies, but a ship within the inner lethal zone (up to 180 points) is destroyed even with an active shield. It uses the same respawn/game-over behavior as a collision. The 3D missile travels 90 depth-units/second, uses a 2.5-second fuse, and kills a ship within 19 spatial units.
+- **Rock breakup audio:** three asteroid-size-aware synthesized fracture effects have a brittle initial crack, low-frequency thump and dusty debris tail, with mild random pitch variation. The original brief rock-hit sound remains for damage that has not split the rock. This remains arcade-styled and uses no downloaded samples.
+- **Telemetry-inspired overlay:** Classic and Modern 2D now have two compact translucent dark panels, amber system headings, small accent rails, separate score/sector/belt information and lives/nukes/shield readout. The centered title, pause and game-over panels use larger status text, a small amber simulation header and a secondary control prompt. The original inspiration was a sci-fi simulation status display; the design is original rather than copied.
+- **Scope:** the new telemetry panels currently apply to Classic and Modern 2D; the separate SceneKit 3D interface is not yet upgraded to the same HUD layout.
 
 ## v0.10.2 — A new sky on every run and every wave; actual spatial parallax
 
