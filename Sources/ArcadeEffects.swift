@@ -104,7 +104,7 @@ enum ArcadeEffects {
 /// Lightweight procedurally generated arcade tones, played only when enabled.
 /// The engine owns the player node and keeps a bounded number of queued samples.
 final class ArcadeAudio {
-    enum Effect { case fire, rock, shield, bounce, comet, ship, saucer, wave }
+    enum Effect { case fire, rock, shield, bounce, comet, nuclear, ship, saucer, wave }
     static let shared = ArcadeAudio()
     var enabled = true {
         didSet { if !enabled { stopThrust() } }
@@ -194,6 +194,7 @@ final class ArcadeAudio {
         case .shield: duration = 0.22; f0 = 350; f1 = 870; noise = 0.02
         case .bounce: duration = 0.16; f0 = 260; f1 = 710; noise = 0.05
         case .comet: duration = 0.58; f0 = 240; f1 = 38; noise = 0.25
+        case .nuclear: duration = 0.92; f0 = 105; f1 = 17; noise = 0.70
         case .ship: duration = 0.48; f0 = 280; f1 = 46; noise = 0.40
         case .saucer: duration = 0.15; f0 = 340; f1 = 650; noise = 0.04
         case .wave: duration = 0.24; f0 = 330; f1 = 880; noise = 0.0
