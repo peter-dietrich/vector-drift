@@ -164,6 +164,7 @@ private struct GameWindow: View {
     @State private var showSavedGames = false
     @State private var activePresetID = ""
     @State private var savedGames: [GameSaveSlot] = []
+    @State private var saved3DGames: [Flight3DSaveSlot] = []
     @State private var flight = Flight3DGame()
     @State private var game: DriftScene = {
         let scene = DriftScene(size: CGSize(width: 1080, height: 670))
@@ -186,18 +187,26 @@ private struct GameWindow: View {
                     Spacer()
                     Button("Custom Game") { showPreferences = true }
                     Button("Save Game") {
-                        if let snapshot = game.makeSnapshot(activePresetID: activePresetID) {
+                        if mode == Look.flight3D.rawValue {
+                            if let snapshot = flight.makeSnapshot() {
+                                Flight3DStore.save(snapshot)
+                            }
+                        } else if let snapshot = game.makeSnapshot(activePresetID: activePresetID) {
                             _ = GameStore.saveGame(snapshot)
                         }
                     }
                     Button("Resume") {
                         savedGames = GameStore.saves()
+                        saved3DGames = Flight3DStore.saves()
                         showSavedGames = true
                     }
                     Toggle("Sound", isOn: $soundEnabled)
                         .toggleStyle(.checkbox)
                     Button("Scores") { showScores = true }
-                    Button("New Game") { game.restart() }
+                    Button("New Game") {
+                        if mode == Look.flight3D.rawValue { flight.restart() }
+                        else { game.restart() }
+                    }
                         .keyboardShortcut("r", modifiers: [.command])
                         .buttonStyle(.borderedProminent)
                         .tint(.cyan)
@@ -286,11 +295,34 @@ private struct GameWindow: View {
         .sheet(isPresented: $showSavedGames) {
             VStack(alignment: .leading, spacing: 12) {
                 Text("SAVED GAMES").font(.title2.monospaced().bold())
-                if savedGames.isEmpty {
-                    Text("No saved 2D games yet. Start playing, then choose Save Game.")
+                if savedGames.isEmpty && saved3DGames.isEmpty {
+                    Text("No saved games yet. Start playing, then choose Save Game.")
                         .foregroundStyle(.secondary)
                 }
                 ScrollView {
+                    ForEach(saved3DGames) { slot in
+                        HStack {
+                            VStack(alignment: .leading) {
+                                Text(slot.summary).font(.headline)
+                                Text(slot.date.formatted()).font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button("Resume") {
+                                mode = Look.flight3D.rawValue
+                                difficulty = slot.snapshot.difficulty
+                                activePresetID = ""
+                                let snapshot = slot.snapshot
+                                DispatchQueue.main.async { flight.restore(snapshot) }
+                                showSavedGames = false
+                            }
+                            Button("Delete", role: .destructive) {
+                                Flight3DStore.delete(id: slot.id)
+                                saved3DGames = Flight3DStore.saves()
+                            }
+                        }
+                        Divider()
+                    }
                     ForEach(savedGames) { slot in
                         HStack {
                             VStack(alignment: .leading) {
