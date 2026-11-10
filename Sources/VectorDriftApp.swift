@@ -1353,7 +1353,7 @@ final class DriftScene: SKScene {
                 ModernVisuals.damageFlare(in: self, at: rock.node.position,
                                           radius: rock.radius, stage: damageStage)
             }
-            continue // No change in radius until final shot or countdown.
+            return // No change in radius until final shot or countdown.
         }
         fragmentRock(at: j, byPlayer: true)
     }
