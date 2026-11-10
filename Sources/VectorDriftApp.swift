@@ -550,6 +550,7 @@ final class DriftScene: SKScene {
     private let statusHUD = SKLabelNode(fontNamed: "Menlo-Bold")
     private let message = SKLabelNode(fontNamed: "Menlo-Bold")
     private let titleLogo = SKSpriteNode()
+    private let classicTitleStars = SKNode()
     private let leftPanel = SKShapeNode(rectOf: CGSize(width: 304, height: 76), cornerRadius: 7)
     private let rightPanel = SKShapeNode(rectOf: CGSize(width: 304, height: 76), cornerRadius: 7)
     private let leftAccent = SKShapeNode(rectOf: CGSize(width: 2, height: 56))
@@ -662,6 +663,21 @@ final class DriftScene: SKScene {
         stagePanel.lineWidth = 0.7
         stagePanel.isHidden = true
         addChild(stagePanel)
+        classicTitleStars.zPosition = -28
+        addChild(classicTitleStars)
+        for i in 0..<130 {
+            let r: CGFloat = i.isMultiple(of: 12) ? 1.25 : CGFloat.random(in: 0.25...0.75)
+            let star = SKShapeNode(circleOfRadius: r)
+            star.position = CGPoint(x: CGFloat.random(in: 0...size.width),
+                                    y: CGFloat.random(in: 0...size.height))
+            star.fillColor = .white.withAlphaComponent(CGFloat.random(in: 0.18...0.68))
+            star.strokeColor = .clear
+            classicTitleStars.addChild(star)
+        }
+        classicTitleStars.run(.repeatForever(.sequence([
+            .fadeAlpha(to: 0.52, duration: 3.2),
+            .fadeAlpha(to: 1.0, duration: 3.2)
+        ])))
         titleLogo.texture = SKTexture(imageNamed: "VectorDriftLogo")
         titleLogo.size = CGSize(width: 252, height: 252)
         titleLogo.zPosition = 95
@@ -734,8 +750,10 @@ final class DriftScene: SKScene {
         }
         message.position = CGPoint(x: size.width / 2, y: size.height / 2 + 1)
         titleLogo.position = CGPoint(x: size.width / 2, y: size.height / 2 + 45)
-        stageHeading.position = CGPoint(x: size.width / 2, y: size.height / 2 + 31)
-        stageCaption.position = CGPoint(x: size.width / 2, y: size.height / 2 - 31)
+        stageHeading.position = CGPoint(x: size.width / 2,
+            y: size.height / 2 + (titleVisible ? -110 : 31))
+        stageCaption.position = CGPoint(x: size.width / 2,
+            y: size.height / 2 + (titleVisible ? -135 : -31))
         stagePanel.position = CGPoint(x: size.width / 2, y: size.height / 2)
     }
 
@@ -820,6 +838,7 @@ final class DriftScene: SKScene {
         stageCaption.text = "FUN CITY  //  ORIGINAL ARCADE FLIGHT"
         stagePanel.isHidden = true
         titleLogo.isHidden = false
+        classicTitleStars.isHidden = modern
         stageHeading.position = CGPoint(x: size.width / 2, y: size.height / 2 - 110)
         stageCaption.position = CGPoint(x: size.width / 2, y: size.height / 2 - 135)
         stageHeading.isHidden = false
@@ -1472,6 +1491,7 @@ final class DriftScene: SKScene {
         }
         modernShipDetail.isHidden = !modern
         flame.isHidden = true
+        classicTitleStars.isHidden = modern || !titleVisible
         // Keep the procedural scene alive during graphics-mode changes.
         // Recreating multiple shader textures on each toggle could render an
         // empty or white background until gameplay began.
@@ -2140,6 +2160,7 @@ final class DriftScene: SKScene {
         over = false
         stopped = false
         titleLogo.isHidden = true
+        classicTitleStars.isHidden = true
         stageHeading.position = CGPoint(x: size.width / 2, y: size.height / 2 + 31)
         stageCaption.position = CGPoint(x: size.width / 2, y: size.height / 2 - 31)
         stagePanel.isHidden = true
