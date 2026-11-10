@@ -46,6 +46,51 @@ struct AmmoReserve: Codable {
     }
 }
 
+/// The Shift+Space beam uses a separate 25-shot energy bank, not the
+/// 500-round normal-ammunition reserve. A full eight-second recharge begins
+/// only once all 25 beams have been fired; normal bullets remain available.
+struct BeamBattery: Codable {
+    static let capacity = 25
+    static let rechargeSeconds: CGFloat = 8
+    static let beamSeconds: CGFloat = 0.30
+    static let fireInterval: CGFloat = 0.34
+
+    var charges = capacity
+    var rechargeRemaining: CGFloat = 0
+
+    mutating func fire() -> Bool {
+        guard charges > 0 else { return false }
+        charges -= 1
+        if charges == 0 { rechargeRemaining = Self.rechargeSeconds }
+        return true
+    }
+
+    mutating func update(dt: CGFloat) {
+        guard charges == 0 && rechargeRemaining > 0 else { return }
+        rechargeRemaining = max(0, rechargeRemaining - dt)
+        if rechargeRemaining == 0 { charges = Self.capacity }
+    }
+
+    mutating func normalize() {
+        charges = max(0, min(Self.capacity, charges))
+        if charges == 0 {
+            rechargeRemaining = rechargeRemaining > 0
+                ? min(Self.rechargeSeconds, rechargeRemaining)
+                : Self.rechargeSeconds
+        } else {
+            rechargeRemaining = 0
+        }
+    }
+
+    var statusText: String {
+        if charges == 0 {
+            return String(format: "LASER 00/25  CHARGING %.1fS",
+                          Double(rechargeRemaining))
+        }
+        return String(format: "LASER %02d/25  [SHIFT+SPACE]", charges)
+    }
+}
+
 // User-editable arcade rules. Built-in difficulties are never mutated.
 struct GameRules: Codable, Equatable {
     enum EdgeMode: String, Codable, CaseIterable, Identifiable {
@@ -221,6 +266,7 @@ struct GameSnapshot: Codable {
     var missile: SavedProjectile?
     // Optional for backward-compatible decoding of older saved games.
     var ammoReserve: AmmoReserve?
+    var beamBattery: BeamBattery?
 }
 
 struct GameSaveSlot: Codable, Identifiable {
