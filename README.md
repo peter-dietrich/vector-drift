@@ -209,3 +209,7 @@ Modern now composites procedural shaded asteroid sprites with vector overlays, p
 ## Licensing and release
 
 Code is MIT licensed. Game name has not been cleared for trademark use. Art and generated audio are original implementations rather than copied Atari assets. Before public binary distribution, verify branding, art similarity, signing, and notarization.
+
+## Arcade title screen
+
+The native game now shows an animated Fun City-era **Vector Drift** neon logo over a gently breathing Modern nebula. Classic mode uses a subtle starfield behind the title. Press Return to begin. The artwork is bundled in `Resources/VectorDriftLogo.jpg` and included in the Xcode resources build phase, so no web request is needed. The full-size source artwork can be used to replace the reduced-size bundled prototype image in future iterations.
