@@ -421,6 +421,10 @@ private final class KeyboardView: SKView {
     override func keyUp(with event: NSEvent) {
         (scene as? DriftScene)?.key(event.keyCode, down: false, isRepeat: false)
     }
+    override func flagsChanged(with event: NSEvent) {
+        (scene as? DriftScene)?.setShiftActive(event.modifierFlags.contains(.shift))
+        super.flagsChanged(with: event)
+    }
     override func resignFirstResponder() -> Bool {
         (scene as? DriftScene)?.clearKeys()
         return super.resignFirstResponder()
@@ -496,6 +500,9 @@ final class DriftScene: SKScene {
     var customRules: GameRules?
     private var boulders: [Boulder] = []
     private var lasers: [Laser] = []
+    private var beamBattery = BeamBattery()
+    private var lastBeamFire: CGFloat = -2
+    private var shiftHeld = false
     private var comet: Comet?
     private var shockwaves: [Shockwave] = []
     private var nuclearMissile: NuclearMissile?
@@ -567,6 +574,7 @@ final class DriftScene: SKScene {
     private let difficultyReadout = SKLabelNode(fontNamed: "Menlo")
     private let ammoReadout = SKLabelNode(fontNamed: "Menlo-Bold")
     private let ammoStatus = SKLabelNode(fontNamed: "Menlo")
+    private let beamStatus = SKLabelNode(fontNamed: "Menlo-Bold")
     private let telemetryRuleOne = SKShapeNode(rectOf: CGSize(width: 210, height: 0.7))
     private let telemetryRuleTwo = SKShapeNode(rectOf: CGSize(width: 210, height: 0.7))
     private let stageHeading = SKLabelNode(fontNamed: "Menlo-Bold")
@@ -613,7 +621,7 @@ final class DriftScene: SKScene {
             leftHeading, scoreCaption, hud, leftFootnote,
             waveCaption, waveValue, beltCaption, beltValue,
             rightHeading, statusHUD, rightFootnote, difficultyReadout,
-            ammoReadout, ammoStatus
+            ammoReadout, ammoStatus, beamStatus
         ]
         for label in telemetryLabels {
             label.zPosition = 90
@@ -650,6 +658,7 @@ final class DriftScene: SKScene {
         difficultyReadout.fontSize = 10
         ammoReadout.fontSize = 14
         ammoStatus.fontSize = 9
+        beamStatus.fontSize = 9
         for label in [leftFootnote, rightFootnote, difficultyReadout, ammoStatus] {
             label.fontColor = muted
         }
@@ -740,8 +749,9 @@ final class DriftScene: SKScene {
         put(statusHUD, 285)
         put(rightFootnote, 316)
         put(difficultyReadout, 341)
-        put(ammoReadout, 365)
-        put(ammoStatus, 388)
+        put(ammoReadout, 356)
+        put(ammoStatus, 374)
+        put(beamStatus, 395)
         for (rule, offset) in [(telemetryRuleOne, CGFloat(119)),
                                (telemetryRuleTwo, CGFloat(249))] {
             rule.path = CGPath(rect: CGRect(
@@ -774,6 +784,9 @@ final class DriftScene: SKScene {
         score = 0; lives = customRules?.startingLives ?? difficulty.startingLives; wave = 1
         elapsed = 0; lastTime = 0; lastFire = -2; lastWarp = -10
         ammo = AmmoReserve()
+        beamBattery = BeamBattery()
+        lastBeamFire = -2
+        shiftHeld = false
         stopped = false; over = false
         titleVisible = false
         scoreRecorded = false
@@ -826,7 +839,12 @@ final class DriftScene: SKScene {
 
     func clearKeys() {
         held.removeAll()
+        shiftHeld = false
         ArcadeAudio.shared.stopThrust()
+    }
+
+    func setShiftActive(_ active: Bool) {
+        shiftHeld = active
     }
 
     private func showTitle() {
@@ -920,7 +938,8 @@ final class DriftScene: SKScene {
                                    remaining: shieldActive ? shieldEnergy : 0,
                                    total: difficulty.shieldDuration)
         ammo.update(dt: dt, secondsSinceShot: elapsed - lastFire,
-                    triggerHeld: held.contains(49))
+                    triggerHeld: held.contains(49) && (!shiftHeld || beamBattery.charges == 0))
+        beamBattery.update(dt: dt)
         updateHud()
 
         if held.contains(123) { heading += 3.7 * dt }
@@ -942,7 +961,12 @@ final class DriftScene: SKScene {
         ship.position = moveAtEdge(nextShipPosition, velocity: &velocity, margin: 15)
         ship.alpha = elapsed < protectedUntil && Int(elapsed * 10).isMultiple(of: 2) ? 0.25 : 1
 
-        if held.contains(49) &&
+        if held.contains(49) && shiftHeld && beamBattery.charges > 0 {
+            if elapsed - lastBeamFire >= BeamBattery.fireInterval && beamBattery.fire() {
+                lastBeamFire = elapsed
+                fireBeam(direction: forward)
+            }
+        } else if held.contains(49) &&
             elapsed - lastFire > CGFloat(customRules?.shotInterval ?? Double(difficulty.shootCooldown)) &&
             lasers.count < (customRules?.maxBullets ?? 6) && ammo.fire() {
             lastFire = elapsed
@@ -1028,32 +1052,7 @@ final class DriftScene: SKScene {
                       $0.node.position.y - lasers[i].node.position.y) < $0.radius + 2
             }) {
                 lasers.remove(at: i).node.removeFromParent()
-                if boulders[j].hitPoints > 1 {
-                    boulders[j].hitPoints -= 1
-                    let rock = boulders[j]
-                    let damageStage = rock.maximumHitPoints - rock.hitPoints
-                    // First hit: 10s. Second nonfatal hit: 5s. An
-                    // extra hit never extends an existing countdown.
-                    let countdown = CGFloat(10) / CGFloat(damageStage)
-                    boulders[j].fractureRemaining = min(
-                        rock.fractureRemaining ?? countdown, countdown
-                    )
-                    boulders[j].fractureDuration = countdown
-                    rock.crack.isHidden = false
-                    rock.secondCrack.isHidden = damageStage < 2
-                    rock.node.lineWidth = damageStage == 1 ? 3 : 3.8
-                    rock.node.strokeColor = modern
-                        ? (damageStage == 1 ? ModernVisuals.fire : .systemRed)
-                        : (damageStage == 1 ? .yellow : .orange)
-                    ArcadeAudio.shared.play(.rock)
-                    updateFractureIndicator(at: j)
-                    if modern {
-                        ModernVisuals.damageFlare(in: self, at: rock.node.position,
-                                                  radius: rock.radius, stage: damageStage)
-                    }
-                    continue // No change in radius until final shot or countdown.
-                }
-                fragmentRock(at: j, byPlayer: true)
+                damageRock(at: j)
             }
         }
 
@@ -1328,6 +1327,96 @@ final class DriftScene: SKScene {
         }
     }
 
+    /// Both regular bullets and the Shift laser use the same staged
+    /// asteroid fracture behavior. One ray damages each encountered rock once.
+    private func damageRock(at j: Int) {
+        if boulders[j].hitPoints > 1 {
+            boulders[j].hitPoints -= 1
+            let rock = boulders[j]
+            let damageStage = rock.maximumHitPoints - rock.hitPoints
+            // First hit: 10s. Second nonfatal hit: 5s. An
+            // extra hit never extends an existing countdown.
+            let countdown = CGFloat(10) / CGFloat(damageStage)
+            boulders[j].fractureRemaining = min(
+                rock.fractureRemaining ?? countdown, countdown
+            )
+            boulders[j].fractureDuration = countdown
+            rock.crack.isHidden = false
+            rock.secondCrack.isHidden = damageStage < 2
+            rock.node.lineWidth = damageStage == 1 ? 3 : 3.8
+            rock.node.strokeColor = modern
+                ? (damageStage == 1 ? ModernVisuals.fire : .systemRed)
+                : (damageStage == 1 ? .yellow : .orange)
+            ArcadeAudio.shared.play(.rock)
+            updateFractureIndicator(at: j)
+            if modern {
+                ModernVisuals.damageFlare(in: self, at: rock.node.position,
+                                          radius: rock.radius, stage: damageStage)
+            }
+            continue // No change in radius until final shot or countdown.
+        }
+        fragmentRock(at: j, byPlayer: true)
+    }
+
+    private func fireBeam(direction: CGVector) {
+        // Clamp beam to the visible playfield instead of allowing a path to
+        // extend into an adjacent wrapped edge. Multiple rocks can be hit.
+        let origin = CGPoint(x: ship.position.x + direction.dx * 19,
+                             y: ship.position.y + direction.dy * 19)
+        let xTravel = direction.dx > 0.0001 ? (size.width - origin.x) / direction.dx :
+                      direction.dx < -0.0001 ? -origin.x / direction.dx : CGFloat.greatestFiniteMagnitude
+        let yTravel = direction.dy > 0.0001 ? (size.height - origin.y) / direction.dy :
+                      direction.dy < -0.0001 ? -origin.y / direction.dy : CGFloat.greatestFiniteMagnitude
+        let distance = max(0, min(xTravel, yTravel, hypot(size.width, size.height)))
+        let endpoint = CGPoint(x: origin.x + direction.dx * distance,
+                               y: origin.y + direction.dy * distance)
+        let ray = CGMutablePath()
+        ray.move(to: origin)
+        ray.addLine(to: endpoint)
+        let halo = SKShapeNode(path: ray)
+        halo.strokeColor = modern ? .systemCyan : .white
+        halo.lineWidth = modern ? 12 : 5
+        halo.alpha = modern ? 0.30 : 0.18
+        halo.glowWidth = modern ? 18 : 0
+        halo.zPosition = 25
+        addChild(halo)
+        let core = SKShapeNode(path: ray)
+        core.strokeColor = .white
+        core.lineWidth = modern ? 3 : 2
+        core.glowWidth = modern ? 9 : 0
+        core.zPosition = 26
+        addChild(core)
+        for node in [halo, core] {
+            node.run(.sequence([.wait(forDuration: Double(BeamBattery.beamSeconds)),
+                                .removeFromParent()]))
+        }
+        ArcadeAudio.shared.play(.beam)
+
+        func hits(_ point: CGPoint, radius: CGFloat) -> Bool {
+            let deltaX = point.x - origin.x
+            let deltaY = point.y - origin.y
+            let along = deltaX * direction.dx + deltaY * direction.dy
+            guard along >= 0 && along <= distance else { return false }
+            let cross = abs(deltaX * direction.dy - deltaY * direction.dx)
+            return cross <= radius + (modern ? 3 : 2)
+        }
+
+        if let target = comet, hits(target.node.position, radius: 19) {
+            detonateComet(at: target.node.position)
+        }
+        if let target = saucer, hits(target.node.position, radius: 24) {
+            destroySaucer()
+        }
+        let originals = boulders.count
+        if originals > 0 {
+            for i in stride(from: originals - 1, through: 0, by: -1) {
+                if hits(boulders[i].node.position, radius: boulders[i].radius) {
+                    damageRock(at: i)
+                }
+            }
+        }
+    }
+
     private func updateFractureIndicator(at index: Int) {
         let rock = boulders[index]
         guard let remaining = rock.fractureRemaining else {
@@ -1434,6 +1523,7 @@ final class DriftScene: SKScene {
         ammoReadout.text = String(format: "ROUNDS  %03d / %03d",
                                   ammo.rounds, AmmoReserve.capacity)
         ammoStatus.text = ammo.rechargeStatus(secondsSinceShot: elapsed - lastFire)
+        beamStatus.text = beamBattery.statusText
     }
 
     private func updateStyle() {
@@ -1462,6 +1552,8 @@ final class DriftScene: SKScene {
         waveValue.fontColor = color
         beltValue.fontColor = color
         ammoReadout.fontColor = color
+        beamStatus.fontColor = beamBattery.charges > 0
+            ? (modern ? .systemMint : .white) : .systemOrange
         for rock in boulders {
             styleRock(rock.node, detail: rock.detail)
             rock.surface.isHidden = !modern
@@ -2109,7 +2201,7 @@ final class DriftScene: SKScene {
             }, timeSinceBlackHole: Double(elapsed - lastBlackHole),
             nextBlackHoleDelay: Double(nextBlackHoleDelay),
             missilesRemaining: missilesRemaining, missile: missileState,
-            ammoReserve: ammo
+            ammoReserve: ammo, beamBattery: beamBattery
         )
     }
 
@@ -2146,6 +2238,10 @@ final class DriftScene: SKScene {
         lastFire = elapsed - CGFloat(snapshot.timeSinceShot)
         ammo = snapshot.ammoReserve ?? AmmoReserve()
         ammo.normalize()
+        beamBattery = snapshot.beamBattery ?? BeamBattery()
+        beamBattery.normalize()
+        lastBeamFire = elapsed - BeamBattery.fireInterval
+        shiftHeld = false
         lastWarp = elapsed - CGFloat(snapshot.timeSinceWarp)
         lastComet = elapsed - CGFloat(snapshot.timeSinceComet)
         nextCometDelay = CGFloat(snapshot.nextCometDelay)
