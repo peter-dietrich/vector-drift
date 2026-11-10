@@ -556,7 +556,6 @@ final class DriftScene: SKScene {
     private let hud = SKLabelNode(fontNamed: "Menlo-Bold")
     private let statusHUD = SKLabelNode(fontNamed: "Menlo-Bold")
     private let message = SKLabelNode(fontNamed: "Menlo-Bold")
-    private let titleLogo = SKSpriteNode()
     private let classicTitleStars = SKNode()
     private let leftPanel = SKShapeNode(rectOf: CGSize(width: 304, height: 76), cornerRadius: 7)
     private let rightPanel = SKShapeNode(rectOf: CGSize(width: 304, height: 76), cornerRadius: 7)
@@ -687,15 +686,6 @@ final class DriftScene: SKScene {
             .fadeAlpha(to: 0.52, duration: 3.2),
             .fadeAlpha(to: 1.0, duration: 3.2)
         ])))
-        titleLogo.texture = SKTexture(imageNamed: "VectorDriftLogo")
-        titleLogo.size = CGSize(width: 252, height: 252)
-        titleLogo.zPosition = 95
-        titleLogo.isHidden = true
-        addChild(titleLogo)
-        titleLogo.run(.repeatForever(.sequence([
-            .fadeAlpha(to: 0.84, duration: 2.1),
-            .fadeAlpha(to: 1.0, duration: 2.1)
-        ])))
         message.zPosition = 91
         message.fontSize = 35
         message.horizontalAlignmentMode = .center
@@ -759,11 +749,10 @@ final class DriftScene: SKScene {
             rule.position = CGPoint(x: leftX + 14, y: topY - offset * layoutScale)
         }
         message.position = CGPoint(x: size.width / 2, y: size.height / 2 + 1)
-        titleLogo.position = CGPoint(x: size.width / 2, y: size.height / 2 + 45)
         stageHeading.position = CGPoint(x: size.width / 2,
-            y: size.height / 2 + (titleVisible ? -110 : 31))
+            y: size.height / 2 + (titleVisible ? -6 : 31))
         stageCaption.position = CGPoint(x: size.width / 2,
-            y: size.height / 2 + (titleVisible ? -135 : -31))
+            y: size.height / 2 + (titleVisible ? -31 : -31))
         stagePanel.position = CGPoint(x: size.width / 2, y: size.height / 2)
     }
 
@@ -855,10 +844,9 @@ final class DriftScene: SKScene {
         stageHeading.text = "PRESS RETURN TO BEGIN"
         stageCaption.text = "FUN CITY  //  ORIGINAL ARCADE FLIGHT"
         stagePanel.isHidden = true
-        titleLogo.isHidden = false
         classicTitleStars.isHidden = modern
-        stageHeading.position = CGPoint(x: size.width / 2, y: size.height / 2 - 110)
-        stageCaption.position = CGPoint(x: size.width / 2, y: size.height / 2 - 135)
+        stageHeading.position = CGPoint(x: size.width / 2, y: size.height / 2 - 6)
+        stageCaption.position = CGPoint(x: size.width / 2, y: size.height / 2 - 31)
         stageHeading.isHidden = false
         stageCaption.isHidden = false
         message.position = CGPoint(x: size.width / 2, y: size.height / 2 + 1)
@@ -2255,7 +2243,6 @@ final class DriftScene: SKScene {
         titleVisible = false
         over = false
         stopped = false
-        titleLogo.isHidden = true
         classicTitleStars.isHidden = true
         stageHeading.position = CGPoint(x: size.width / 2, y: size.height / 2 + 31)
         stageCaption.position = CGPoint(x: size.width / 2, y: size.height / 2 - 31)
