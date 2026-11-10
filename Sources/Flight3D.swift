@@ -200,6 +200,8 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
     private let headlight = SCNNode()
     private let overlay = SCNNode()
     private let scoreLabel = SCNNode()
+    private let laserReadout3D = SCNText(string: "LASER 25/25", extrusionDepth: 0)
+    private var laserReadoutText = ""
     private var message: String = ""
     private let boundary: CGFloat = 135
 
@@ -286,6 +288,17 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
         camera.position = SCNVector3(0, 3.2, 12)
         camera.eulerAngles.x = -.pi * 0.07
         ship.addChildNode(camera)
+        // Camera-attached energy HUD follows every 3D maneuver.
+        laserReadout3D.font = NSFont.monospacedSystemFont(ofSize: 0.46, weight: .bold)
+        laserReadout3D.flatness = 0.015
+        let laserMaterial = SCNMaterial()
+        laserMaterial.lightingModel = .constant
+        laserMaterial.diffuse.contents = NSColor.systemCyan
+        laserMaterial.emission.contents = NSColor.systemCyan
+        laserReadout3D.materials = [laserMaterial]
+        let laserHUD = SCNNode(geometry: laserReadout3D)
+        laserHUD.position = SCNVector3(-4.4, 2.85, -8)
+        camera.addChildNode(laserHUD)
         scene.rootNode.addChildNode(ship)
 
         headlight.light = SCNLight()
@@ -331,6 +344,7 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
         lastShot = -2
         ammo = AmmoReserve()
         beamBattery = BeamBattery()
+        laserReadoutText = ""
         lastBeamFire = -2
         shiftHeld = false
         paused = false
@@ -505,6 +519,13 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
         ammo.update(dt: dt, secondsSinceShot: elapsed - lastShot,
                     triggerHeld: pressed.contains(49) && (!shiftHeld || beamBattery.charges == 0))
         beamBattery.update(dt: dt)
+        let laserText = beamBattery.charges == 0
+            ? String(format: "LASER CHARGING %.1fS", Double(beamBattery.rechargeRemaining))
+            : String(format: "LASER %02d/25 [SHIFT+SPACE]", beamBattery.charges)
+        if laserText != laserReadoutText {
+            laserReadoutText = laserText
+            laserReadout3D.string = laserText
+        }
 
         if pressed.contains(123) { yaw += dt * 1.45 }
         if pressed.contains(124) { yaw -= dt * 1.45 }
