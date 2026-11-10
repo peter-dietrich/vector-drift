@@ -105,7 +105,7 @@ enum ArcadeEffects {
 /// The engine owns the player node and keeps a bounded number of queued samples.
 final class ArcadeAudio {
     enum Effect {
-        case fire, rock, rockBurstSmall, rockBurstMedium, rockBurstLarge
+        case fire, beam, rock, rockBurstSmall, rockBurstMedium, rockBurstLarge
         case shield, bounce, comet, nuclear, ship, saucer, wave
     }
     static let shared = ArcadeAudio()
@@ -276,6 +276,7 @@ final class ArcadeAudio {
         let noise: Float
         switch effect {
         case .fire: duration = 0.07; f0 = 780; f1 = 230; noise = 0.08
+        case .beam: duration = 0.30; f0 = 1720; f1 = 390; noise = 0.10
         case .rock, .rockBurstSmall, .rockBurstMedium, .rockBurstLarge:
             return // All rock impacts use the noise-based fracture synthesizer.
         case .shield: duration = 0.22; f0 = 350; f1 = 870; noise = 0.02
