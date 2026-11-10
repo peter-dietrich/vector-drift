@@ -263,8 +263,8 @@ private struct GameWindow: View {
             .background(.black)
             HStack {
                 Text(mode == Look.flight3D.rawValue
-                    ? "3D: ← → Yaw  I K Pitch  Q E Roll  W X Rise/Dive  A D Strafe  ↑ Thrust  ↓ Reverse  Space Fire  S Shield  N Missile"
-                    : "← → Rotate  ↑ Thrust  Space Fire  S Shield  N Missile  ↓ Warp  P Pause  R Restart")
+                    ? "3D: ← → Yaw  I K Pitch  Q E Roll  W X Rise/Dive  A D Strafe  ↑ Thrust  ↓ Reverse  Space Fire  ⇧+Space Laser  S Shield  N Missile"
+                    : "← → Rotate  ↑ Thrust  Space Fire  ⇧+Space Laser  S Shield  N Missile  ↓ Warp  P Pause  R Restart")
                 Spacer()
                 if mode == Look.modern.rawValue {
                     Text("Sky: Original procedural vector nebula")
