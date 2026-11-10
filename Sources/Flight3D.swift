@@ -40,6 +40,7 @@ struct Flight3DSnapshot: Codable {
     var shieldRechargeRemaining: Double
     var lastShotAgo: Double
     var ammoReserve: AmmoReserve?
+    var beamBattery: BeamBattery?
     var missilesRemaining: Int
     var missile: SavedShot3D?
     var rocks: [SavedRock3D]
@@ -133,6 +134,11 @@ final class Flight3DSceneView: SCNView {
         game?.key(event.keyCode, pressed: false, repeatKey: false)
     }
 
+    override func flagsChanged(with event: NSEvent) {
+        game?.setShiftActive(event.modifierFlags.contains(.shift))
+        super.flagsChanged(with: event)
+    }
+
     override func resignFirstResponder() -> Bool {
         game?.clearKeys()
         return super.resignFirstResponder()
@@ -174,6 +180,9 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
     private var elapsed: CGFloat = 0
     private var lastShot: CGFloat = -2
     private var ammo = AmmoReserve()
+    private var beamBattery = BeamBattery()
+    private var shiftHeld = false
+    private var lastBeamFire: CGFloat = -2
     private var invulnerableUntil: CGFloat = 0
     private var shipVelocity = SCNVector3Zero
     private var yaw: CGFloat = 0
@@ -321,6 +330,9 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
         previous = 0
         lastShot = -2
         ammo = AmmoReserve()
+        beamBattery = BeamBattery()
+        lastBeamFire = -2
+        shiftHeld = false
         paused = false
         gameOver = false
         shieldActive = false
@@ -332,7 +344,13 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
         spawnWave()
     }
 
-    func clearKeys() { pressed.removeAll() }
+    func clearKeys() {
+        pressed.removeAll()
+        shiftHeld = false
+    }
+    func setShiftActive(_ active: Bool) {
+        shiftHeld = active
+    }
 
     func key(_ code: UInt16, pressed down: Bool, repeatKey: Bool) {
         if down { pressed.insert(code) } else { pressed.remove(code) }
@@ -422,6 +440,54 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
         if soundEnabled { ArcadeAudio.shared.play(.fire) }
     }
 
+    /// A continuous-looking three-dimensional laser burst, with one
+    /// instantaneous raycast per charge and a 0.3-second visible beam.
+    private func fireBeam3D() {
+        let lengthOfBeam: CGFloat = 145
+        let origin = add(ship.position, multiply(forward(), 2.7))
+        let heading = forward()
+        let halo = SCNNode(geometry: SCNCylinder(radius: 0.22, height: lengthOfBeam))
+        let core = SCNNode(geometry: SCNCylinder(radius: 0.07, height: lengthOfBeam))
+        for (node, color) in [(halo, NSColor.systemCyan), (core, NSColor.white)] {
+            let material = SCNMaterial()
+            material.lightingModel = .constant
+            material.diffuse.contents = color
+            material.emission.contents = color
+            material.isDoubleSided = true
+            node.geometry?.materials = [material]
+            node.eulerAngles.x = .pi / 2
+            node.position = SCNVector3(0, 0, -(2.7 + lengthOfBeam / 2))
+            ship.addChildNode(node)
+            node.runAction(.sequence([
+                .wait(duration: Double(BeamBattery.beamSeconds)),
+                .removeFromParentNode()
+            ]))
+        }
+        if soundEnabled { ArcadeAudio.shared.play(.beam) }
+        let countAtFire = rocks.count
+        if countAtFire == 0 { return }
+        for i in stride(from: countAtFire - 1, through: 0, by: -1) {
+            let rockPosition = rocks[i].node.position
+            let delta = subtract(rockPosition, origin)
+            let along = dot(delta, heading)
+            guard along >= 0 && along <= lengthOfBeam else { continue }
+            let closest = add(origin, multiply(heading, along))
+            guard length(subtract(rockPosition, closest)) <= radius(for: rocks[i].level) + 0.28 else {
+                continue
+            }
+            if rocks[i].health > 1 {
+                rocks[i].health -= 1
+                rocks[i].fractureTime = min(
+                    rocks[i].fractureTime ?? 10,
+                    rocks[i].health <= 1 ? 5 : 10
+                )
+                rocks[i].node.geometry?.firstMaterial?.diffuse.contents = NSColor.orange
+            } else {
+                split(at: i, awardPoints: true)
+            }
+        }
+    }
+
     private func forward() -> SCNVector3 {
         let cp = cos(pitch)
         return normalize(SCNVector3(-sin(yaw) * cp, sin(pitch), -cos(yaw) * cp))
@@ -437,7 +503,8 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
         guard !paused && !gameOver else { return }
         elapsed += dt
         ammo.update(dt: dt, secondsSinceShot: elapsed - lastShot,
-                    triggerHeld: pressed.contains(49))
+                    triggerHeld: pressed.contains(49) && (!shiftHeld || beamBattery.charges == 0))
+        beamBattery.update(dt: dt)
 
         if pressed.contains(123) { yaw += dt * 1.45 }
         if pressed.contains(124) { yaw -= dt * 1.45 }
@@ -466,7 +533,12 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
         ship.position = moveAtEdge(add(ship.position, multiply(shipVelocity, dt)),
                                     velocity: &shipVelocity)
 
-        if pressed.contains(49) && elapsed - lastShot > CGFloat(rules.shotInterval)
+        if pressed.contains(49) && shiftHeld && beamBattery.charges > 0 {
+            if elapsed - lastBeamFire >= BeamBattery.fireInterval && beamBattery.fire() {
+                lastBeamFire = elapsed
+                fireBeam3D()
+            }
+        } else if pressed.contains(49) && elapsed - lastShot > CGFloat(rules.shotInterval)
             && shots.count < rules.maxBullets && ammo.fire() {
             lastShot = elapsed
             fire()
@@ -646,7 +718,7 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
             shieldActive: shieldActive, shieldRemaining: Double(shieldRemaining),
             shieldRechargeRemaining: Double(shieldCooldownRemaining),
             lastShotAgo: Double(elapsed - lastShot), ammoReserve: ammo,
-            missilesRemaining: missilesRemaining,
+            beamBattery: beamBattery, missilesRemaining: missilesRemaining,
             missile: nuclearMissile.map {
                 SavedShot3D(position: saved($0.node.position),
                             velocity: saved($0.velocity), remaining: Double($0.fuse))
@@ -693,6 +765,10 @@ final class Flight3DGame: NSObject, SCNSceneRendererDelegate {
         lastShot = elapsed - CGFloat(data.lastShotAgo)
         ammo = data.ammoReserve ?? AmmoReserve()
         ammo.normalize()
+        beamBattery = data.beamBattery ?? BeamBattery()
+        beamBattery.normalize()
+        lastBeamFire = elapsed - BeamBattery.fireInterval
+        shiftHeld = false
         missilesRemaining = data.missilesRemaining
         lastBlackHole = elapsed - CGFloat(data.lastBlackHoleAgo)
         nextBlackHoleDelay = CGFloat(data.nextBlackHoleDelay)
