@@ -1,8 +1,17 @@
 # Vector Drift
 
+## Maintainer documentation (2026 audit)
+
+- [Architecture and development](docs/DEVELOPMENT.md) — code structure, local workflow, data and gameplay scope.
+- [Build, tests and quality checks](docs/QA_CHECKLIST.md) — repeatable Mac checks and what CI does **not** prove.
+- [Release and signing](docs/RELEASE.md) — release tags, notarization, archive output and Fun City integration.
+- [Licensing and provenance](docs/LICENSING.md) — MIT terms, inspiration/trademarks, asset-origin review and redistribution boundaries.
+- [Third-party notices](THIRD_PARTY_NOTICES.md) — observed libraries/resources and verification status.
+
+
 Native macOS arcade space shooter with Classic, Modern and true XYZ 3D Flight modes.
 
-A native macOS arcade space shooter with two independent presentation modes: **Classic** monochrome vectors and **Modern Vector** with original procedural effects. Not affiliated with Atari.
+A native macOS arcade space shooter with three presentation modes: **Classic** monochrome vectors and **Modern Vector** with original procedural effects. Not affiliated with Atari.
 
 ## Build
 
