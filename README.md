@@ -221,7 +221,7 @@ Code is MIT licensed. Game name has not been cleared for trademark use. Art and 
 
 ## Arcade title screen
 
-The native game now shows an animated Fun City-era **Vector Drift** neon logo over a gently breathing Modern nebula. Classic mode uses a subtle starfield behind the title. Press Return to begin. The artwork is bundled in `Resources/VectorDriftLogo.jpg` and included in the Xcode resources build phase, so no web request is needed. The full-size source artwork can be used to replace the reduced-size bundled prototype image in future iterations.
+The title screen uses the gently breathing Modern nebula, or a subtle Classic starfield, with a small centered **Press Return to Begin** prompt. The former large centered neon logo and its bundled image asset were removed to keep the playfield unobstructed. Press Return to begin.
 
 ## Shift + Space laser gun
 
