@@ -549,6 +549,7 @@ final class DriftScene: SKScene {
     private let hud = SKLabelNode(fontNamed: "Menlo-Bold")
     private let statusHUD = SKLabelNode(fontNamed: "Menlo-Bold")
     private let message = SKLabelNode(fontNamed: "Menlo-Bold")
+    private let titleLogo = SKSpriteNode()
     private let leftPanel = SKShapeNode(rectOf: CGSize(width: 304, height: 76), cornerRadius: 7)
     private let rightPanel = SKShapeNode(rectOf: CGSize(width: 304, height: 76), cornerRadius: 7)
     private let leftAccent = SKShapeNode(rectOf: CGSize(width: 2, height: 56))
@@ -661,6 +662,15 @@ final class DriftScene: SKScene {
         stagePanel.lineWidth = 0.7
         stagePanel.isHidden = true
         addChild(stagePanel)
+        titleLogo.texture = SKTexture(imageNamed: "VectorDriftLogo")
+        titleLogo.size = CGSize(width: 252, height: 252)
+        titleLogo.zPosition = 95
+        titleLogo.isHidden = true
+        addChild(titleLogo)
+        titleLogo.run(.repeatForever(.sequence([
+            .fadeAlpha(to: 0.84, duration: 2.1),
+            .fadeAlpha(to: 1.0, duration: 2.1)
+        ])))
         message.zPosition = 91
         message.fontSize = 35
         message.horizontalAlignmentMode = .center
@@ -723,6 +733,7 @@ final class DriftScene: SKScene {
             rule.position = CGPoint(x: leftX + 14, y: topY - offset * layoutScale)
         }
         message.position = CGPoint(x: size.width / 2, y: size.height / 2 + 1)
+        titleLogo.position = CGPoint(x: size.width / 2, y: size.height / 2 + 45)
         stageHeading.position = CGPoint(x: size.width / 2, y: size.height / 2 + 31)
         stageCaption.position = CGPoint(x: size.width / 2, y: size.height / 2 - 31)
         stagePanel.position = CGPoint(x: size.width / 2, y: size.height / 2)
@@ -804,10 +815,13 @@ final class DriftScene: SKScene {
         ArcadeAudio.shared.stopThrust()
         titleVisible = true
         over = false
-        message.text = "VECTOR DRIFT"
-        stageHeading.text = "SIMULATION    //    ARCADE FLIGHT"
-        stageCaption.text = "PRESS RETURN TO BEGIN"
-        stagePanel.isHidden = false
+        message.text = ""
+        stageHeading.text = "PRESS RETURN TO BEGIN"
+        stageCaption.text = "FUN CITY  //  ORIGINAL ARCADE FLIGHT"
+        stagePanel.isHidden = true
+        titleLogo.isHidden = false
+        stageHeading.position = CGPoint(x: size.width / 2, y: size.height / 2 - 110)
+        stageCaption.position = CGPoint(x: size.width / 2, y: size.height / 2 - 135)
         stageHeading.isHidden = false
         stageCaption.isHidden = false
         message.position = CGPoint(x: size.width / 2, y: size.height / 2 + 1)
@@ -857,7 +871,17 @@ final class DriftScene: SKScene {
     override func update(_ currentTime: TimeInterval) {
         let dt = lastTime == 0 ? CGFloat(1.0 / 60) : CGFloat(min(max(currentTime - lastTime, 0), 1.0 / 30))
         lastTime = currentTime
-        guard ready && !over && !stopped && !titleVisible else {
+        guard ready else { return }
+        if titleVisible {
+            // Show the nebula in a gently animated attract mode before Return.
+            elapsed += dt
+            if modern {
+                backgroundLayer?.animate(time: elapsed, density: 0.45,
+                                         shipVelocity: .zero, thrusting: false)
+            }
+            return
+        }
+        guard !over && !stopped else {
             ArcadeAudio.shared.stopThrust()
             return
         }
@@ -2115,6 +2139,9 @@ final class DriftScene: SKScene {
         titleVisible = false
         over = false
         stopped = false
+        titleLogo.isHidden = true
+        stageHeading.position = CGPoint(x: size.width / 2, y: size.height / 2 + 31)
+        stageCaption.position = CGPoint(x: size.width / 2, y: size.height / 2 - 31)
         stagePanel.isHidden = true
         stageHeading.isHidden = true
         stageCaption.isHidden = true
