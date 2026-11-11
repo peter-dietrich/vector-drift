@@ -257,7 +257,7 @@ private struct GameWindow: View {
                 if mode == Look.flight3D.rawValue {
                     Flight3DView(game: flight)
                 } else {
-                    GameView(scene: game)
+                    GameView(scene: game, graphics: mode, selectedDifficulty: difficulty)
                 }
             }
             .background(.black)
@@ -388,20 +388,33 @@ private struct GameWindow: View {
             activePresetID = ""
             game.customRules = nil
             flight.customRules = nil
-            game.restart()
+            game.refreshDifficultySelection()
         }
     }
 }
 
 private struct GameView: NSViewRepresentable {
     let scene: DriftScene
+    let graphics: String
+    let selectedDifficulty: String
+
+    // Configure BEFORE presenting the scene. This is essential on a cold
+    // launch, because @AppStorage's selected mode may already be Modern,
+    // so SwiftUI won't call the onChange handler at all.
     func makeNSView(context: Context) -> KeyboardView {
         let view = KeyboardView()
         view.preferredFramesPerSecond = 60
+        scene.modern = graphics == Look.modern.rawValue
+        scene.difficulty = Difficulty(rawValue: selectedDifficulty) ?? .medium
         view.presentScene(scene)
         return view
     }
+
+    // Keep the actual renderer synchronized with the mode buttons after
+    // reattachments and when returning from the 3D SceneKit view.
     func updateNSView(_ view: KeyboardView, context: Context) {
+        scene.modern = graphics == Look.modern.rawValue
+        scene.difficulty = Difficulty(rawValue: selectedDifficulty) ?? .medium
         if view.scene !== scene { view.presentScene(scene) }
     }
 }
@@ -524,6 +537,9 @@ final class DriftScene: SKScene {
     private var shieldEnergy: CGFloat = 0
     private var shieldRechargeRemaining: CGFloat = 0
     private let shieldNode = ArcadeEffects.shield()
+    // A guaranteed opaque floor for the entire scene, independent of
+    // SwiftUI view timing, scene clear colors or procedural textures.
+    private let spaceBackdrop = SKSpriteNode(color: .black, size: .zero)
     private var backgroundLayer: VectorNebulaField?
     private var lastBeltSpawn: CGFloat = 0
     private let modernShipDetail = ModernVisuals.shipDetail()
@@ -590,6 +606,11 @@ final class DriftScene: SKScene {
         }
         ready = true
         backgroundColor = .black
+        spaceBackdrop.zPosition = -1000
+        spaceBackdrop.color = .black
+        spaceBackdrop.size = size
+        spaceBackdrop.position = CGPoint(x: size.width / 2, y: size.height / 2)
+        addChild(spaceBackdrop)
         ship.fillColor = .clear
         ship.lineWidth = 2
         ship.zPosition = 5
@@ -701,6 +722,8 @@ final class DriftScene: SKScene {
     }
 
     override func didChangeSize(_ oldSize: CGSize) {
+        spaceBackdrop.size = size
+        spaceBackdrop.position = CGPoint(x: size.width / 2, y: size.height / 2)
         backgroundLayer?.resize(to: size)
         // 15% smaller than the preceding right column; extra ammunition
         // readouts fit by tightening vertical spacing, not enlarging the glass.
@@ -752,7 +775,7 @@ final class DriftScene: SKScene {
         stageHeading.position = CGPoint(x: size.width / 2,
             y: size.height / 2 + (titleVisible ? -6 : 31))
         stageCaption.position = CGPoint(x: size.width / 2,
-            y: size.height / 2 + (titleVisible ? -31 : -31))
+            y: size.height / 2 + (titleVisible ? -42 : -31))
         stagePanel.position = CGPoint(x: size.width / 2, y: size.height / 2)
     }
 
@@ -798,8 +821,13 @@ final class DriftScene: SKScene {
         ship.alpha = 1
         ship.setScale(1)
         ship.isHidden = false
+        classicTitleStars.isHidden = true
         shieldNode.isHidden = true
         message.text = ""
+        stageHeading.fontSize = 8.5
+        stageHeading.fontColor = SKColor(calibratedRed: 1, green: 0.72, blue: 0.4, alpha: 0.92)
+        stageCaption.fontSize = 10
+        stageCaption.fontColor = SKColor(calibratedWhite: 0.85, alpha: 1)
         stagePanel.isHidden = true
         stageHeading.isHidden = true
         stageCaption.isHidden = true
@@ -839,19 +867,41 @@ final class DriftScene: SKScene {
     private func showTitle() {
         ArcadeAudio.shared.stopThrust()
         titleVisible = true
+        stopped = false
         over = false
+        // Hide the ship at (0, 0) and any residual gameplay objects until
+        // the user starts. They will be restored by restart().
+        ship.isHidden = true
+        for rock in boulders { rock.node.isHidden = true }
+        lives = customRules?.startingLives ?? difficulty.startingLives
         message.text = ""
+        stageHeading.removeAllActions()
         stageHeading.text = "PRESS RETURN TO BEGIN"
+        stageHeading.fontSize = 23
+        stageHeading.fontColor = .white
         stageCaption.text = "FUN CITY  //  ORIGINAL ARCADE FLIGHT"
+        stageCaption.fontSize = 12
+        stageCaption.fontColor = SKColor(calibratedWhite: 0.86, alpha: 0.94)
         stagePanel.isHidden = true
         classicTitleStars.isHidden = modern
         stageHeading.position = CGPoint(x: size.width / 2, y: size.height / 2 - 6)
-        stageCaption.position = CGPoint(x: size.width / 2, y: size.height / 2 - 31)
+        stageCaption.position = CGPoint(x: size.width / 2, y: size.height / 2 - 42)
         stageHeading.isHidden = false
         stageCaption.isHidden = false
         message.position = CGPoint(x: size.width / 2, y: size.height / 2 + 1)
-        updateHud()
         updateStyle()
+    }
+
+    // A difficulty selection on the title screen should not silently start
+    // the game. While playing, preserve the existing restart behavior.
+    func refreshDifficultySelection() {
+        guard ready else { return }
+        if titleVisible {
+            lives = customRules?.startingLives ?? difficulty.startingLives
+            updateHud()
+        } else {
+            restart()
+        }
     }
 
     func key(_ code: UInt16, down: Bool, isRepeat: Bool) {
@@ -1516,9 +1566,11 @@ final class DriftScene: SKScene {
 
     private func updateStyle() {
         guard ready else { return }
-        backgroundColor = modern
-            ? SKColor(calibratedRed: 0.015, green: 0.025, blue: 0.085, alpha: 1)
-            : .black
+        // Opaque scene and sprite guarantees never rely on SKView's
+        // default white/transparent clear color.
+        let darkSpace = SKColor(calibratedRed: 0.005, green: 0.009, blue: 0.025, alpha: 1)
+        backgroundColor = modern ? darkSpace : .black
+        spaceBackdrop.color = modern ? darkSpace : .black
         let color: SKColor = modern ? .cyan : .white
         ship.strokeColor = color
         ship.glowWidth = modern ? 5 : 0
@@ -1600,6 +1652,9 @@ final class DriftScene: SKScene {
             laser.node.fillColor = modern ? .yellow : .white
             laser.node.strokeColor = laser.node.fillColor
         }
+        // Mode switching while on the title screen must update the value
+        // readouts immediately; previously they could still say CLASSIC.
+        updateHud()
     }
 
     private func styleRock(_ node: SKShapeNode, detail: SKNode) {
