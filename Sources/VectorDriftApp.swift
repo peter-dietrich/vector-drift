@@ -2094,6 +2094,119 @@ final class DriftScene: SKScene {
         }
     }
 
+    private func clearOrbitalTraffic() {
+        satellite?.node.removeFromParent()
+        satellite = nil
+        station?.node.removeFromParent()
+        station = nil
+    }
+
+    /// Timeline-based orbital flybys, driven by game time (not wall time).
+    /// Each new satellite is scheduled every twenty seconds. The station
+    /// floats by less often and is not part of any combat collision set.
+    private func updateOrbitalTraffic(_ dt: CGFloat) {
+        if elapsed >= nextSatelliteAt {
+            while elapsed >= nextSatelliteAt { nextSatelliteAt += 20 }
+            if satellite == nil { spawnSatellite() }
+        }
+        if elapsed >= nextStationAt {
+            while elapsed >= nextStationAt { nextStationAt += 56 }
+            if station == nil { spawnStation() }
+        }
+
+        if var object = satellite {
+            object.remaining -= dt
+            object.node.position.x += object.velocity.dx * dt
+            object.node.position.y += object.velocity.dy * dt
+            object.node.zRotation += dt * 0.16
+            if object.remaining <= 0 ||
+                object.node.position.x < -110 ||
+                object.node.position.x > size.width + 110 {
+                object.node.removeFromParent()
+                satellite = nil
+            } else {
+                satellite = object
+            }
+        }
+        if var object = station {
+            object.remaining -= dt
+            object.node.position.x += object.velocity.dx * dt
+            object.node.position.y += object.velocity.dy * dt
+            object.node.zRotation += dt * 0.018
+            if object.remaining <= 0 ||
+                object.node.position.x < -155 ||
+                object.node.position.x > size.width + 155 {
+                object.node.removeFromParent()
+                station = nil
+            } else {
+                station = object
+            }
+        }
+    }
+
+    private func spawnSatellite() {
+        let fromLeft = Bool.random()
+        let direction: CGFloat = fromLeft ? 1 : -1
+        let node = ArcadeEffects.satellite(modern: modern)
+        node.position = CGPoint(
+            x: fromLeft ? -85 : size.width + 85,
+            y: CGFloat.random(in: size.height * 0.20...size.height * 0.78)
+        )
+        node.zRotation = CGFloat.random(in: -0.22...0.22)
+        addChild(node)
+        let speed = CGFloat.random(in: 105...145)
+        let travelTime = (size.width + 220) / speed + 1.0
+        satellite = OrbitalTraffic(
+            node: node,
+            velocity: CGVector(dx: direction * speed, dy: CGFloat.random(in: -8...8)),
+            remaining: travelTime
+        )
+    }
+
+    private func spawnStation() {
+        let fromLeft = Bool.random()
+        let direction: CGFloat = fromLeft ? 1 : -1
+        let node = ArcadeEffects.station(modern: modern)
+        node.position = CGPoint(
+            x: fromLeft ? -145 : size.width + 145,
+            y: CGFloat.random(in: size.height * 0.24...size.height * 0.73)
+        )
+        node.setScale(CGFloat.random(in: 0.75...1.05))
+        addChild(node)
+        let speed = CGFloat.random(in: 70...100)
+        station = OrbitalTraffic(
+            node: node,
+            velocity: CGVector(dx: direction * speed, dy: CGFloat.random(in: -5...5)),
+            remaining: (size.width + 320) / speed + 1.5
+        )
+    }
+
+    private func destroySatellite(at point: CGPoint) {
+        guard let target = satellite else { return }
+        target.node.removeFromParent()
+        satellite = nil
+        award(350)
+        ArcadeAudio.shared.playRockBreak(level: 4)
+        if modern {
+            ModernVisuals.burst(in: self, at: point, color: ModernVisuals.ice, count: 29)
+            ModernVisuals.burst(in: self, at: point, color: .systemOrange, count: 19)
+            ModernVisuals.floatScore("SATELLITE +350", in: self, at: point)
+        } else {
+            ModernVisuals.burst(in: self, at: point, color: .white, count: 20)
+        }
+        let flash = SKShapeNode(circleOfRadius: 11)
+        flash.position = point
+        flash.fillColor = modern ? .systemCyan : .white
+        flash.strokeColor = .clear
+        flash.glowWidth = modern ? 22 : 0
+        flash.zPosition = 14
+        addChild(flash)
+        flash.run(.sequence([
+            .group([.scale(to: 4, duration: 0.38), .fadeOut(withDuration: 0.38)]),
+            .removeFromParent()
+        ]))
+    }
+
     private func clearEnemies() {
         saucer?.node.removeFromParent()
         saucer = nil
@@ -2108,14 +2221,23 @@ final class DriftScene: SKScene {
         guard var enemy = saucer else { return }
         enemy.remaining -= dt
         enemy.node.position.x += enemy.velocity.dx * dt
-        enemy.node.position.y += sin(elapsed * 2.6) * 22 * dt
-        if elapsed - lastSaucerShot > (difficulty == .hard ? 1.3 : difficulty == .medium ? 2.0 : 2.8) {
-            lastSaucerShot = elapsed
-            fireSaucerShot(from: enemy.node.position)
-            ArcadeAudio.shared.play(.saucer)
+        let lateral = sin(elapsed * 3.4) * 31 * dt
+        let track = max(-18 * dt, min(18 * dt, (ship.position.y - enemy.node.position.y) * 0.10 * dt))
+        enemy.node.position.y = max(35, min(size.height - 35,
+                                              enemy.node.position.y + lateral + track))
+        if enemy.decloakRemaining > 0 {
+            enemy.decloakRemaining = max(0, enemy.decloakRemaining - dt)
+        } else {
+            let interval: CGFloat = difficulty == .hard ? 1.05 :
+                                     difficulty == .medium ? 1.65 : 2.45
+            if elapsed - lastSaucerShot >= interval && enemyShots.count < 22 {
+                lastSaucerShot = elapsed
+                fireSaucerVolley(from: enemy.node.position)
+                ArcadeAudio.shared.play(.saucer)
+            }
         }
-        if enemy.remaining <= 0 || enemy.node.position.x < -65 ||
-           enemy.node.position.x > size.width + 65 {
+        if enemy.remaining <= 0 || enemy.node.position.x < -75 ||
+           enemy.node.position.x > size.width + 75 {
             enemy.node.removeFromParent()
             saucer = nil
             lastSaucer = elapsed
@@ -2129,31 +2251,85 @@ final class DriftScene: SKScene {
         let fromLeft = Bool.random()
         let direction: CGFloat = fromLeft ? 1 : -1
         let node = ArcadeEffects.saucer(modern: modern)
-        node.position = CGPoint(x: fromLeft ? -40 : size.width + 40,
-                                y: CGFloat.random(in: (size.height * 0.25)...(size.height * 0.85)))
+        node.position = CGPoint(
+            x: fromLeft ? -48 : size.width + 48,
+            y: CGFloat.random(in: size.height * 0.22...size.height * 0.79)
+        )
+        if !fromLeft { node.xScale = -1 }
+        node.alpha = 0.05
         addChild(node)
-        let speed = CGFloat.random(in: 72...108) * difficulty.speedMultiplier
-        saucer = Saucer(node: node, velocity: CGVector(dx: direction * speed, dy: 0),
-                        remaining: (size.width + 120) / speed + 1)
+        // Non-collidable until the shimmer resolves; the enemy appears as
+        // though a cloak is losing stability, then becomes fully visible.
+        node.run(.sequence([
+            .fadeAlpha(to: 0.34, duration: 0.22),
+            .fadeAlpha(to: 0.10, duration: 0.13),
+            .fadeAlpha(to: 0.62, duration: 0.24),
+            .fadeAlpha(to: 0.25, duration: 0.12),
+            .fadeAlpha(to: 1.0, duration: 0.39)
+        ]))
+        let ripple = SKShapeNode(circleOfRadius: 38)
+        ripple.fillColor = .clear
+        ripple.strokeColor = modern ? .systemPink : .white
+        ripple.lineWidth = 1.5
+        ripple.alpha = 0.55
+        ripple.glowWidth = modern ? 8 : 0
+        node.addChild(ripple)
+        ripple.run(.sequence([
+            .group([.scale(to: 1.45, duration: 1.10),
+                    .fadeOut(withDuration: 1.10)]),
+            .removeFromParent()
+        ]))
+        let speed = CGFloat.random(in: 92...132) * difficulty.speedMultiplier
+        saucer = Saucer(node: node,
+                        velocity: CGVector(dx: direction * speed, dy: 0),
+                        remaining: (size.width + 160) / speed + 1.5,
+                        decloakRemaining: 1.10)
         lastSaucerShot = elapsed
     }
 
-    private func fireSaucerShot(from origin: CGPoint) {
-        let aim = atan2(ship.position.y - origin.y, ship.position.x - origin.x)
-        let spread = CGFloat.random(in: difficulty == .easy ? -0.65...0.65 : difficulty == .hard ? -0.09...0.09 : -0.33...0.33)
-        let angle = aim + spread
-        let speed: CGFloat = difficulty == .hard ? 240 : difficulty == .medium ? 195 : 160
-        let bullet = SKShapeNode(circleOfRadius: 3)
-        bullet.position = origin
-        bullet.fillColor = modern ? .systemPink : .white
-        bullet.strokeColor = .clear
-        bullet.glowWidth = modern ? 6 : 0
-        bullet.zPosition = 4
-        addChild(bullet)
-        enemyShots.append(EnemyShot(node: bullet,
-                                    velocity: CGVector(dx: cos(angle) * speed,
-                                                       dy: sin(angle) * speed),
-                                    remaining: 2.7))
+    /// Small, difficulty-scaled aimed volleys with a modest lead on the ship.
+    /// Easy remains a single forgiving projectile; Hard fires a three-shot
+    /// fan without saturating the whole screen.
+    private func fireSaucerVolley(from origin: CGPoint) {
+        let count = difficulty == .hard ? 3 : difficulty == .medium ? 2 : 1
+        let speed: CGFloat = difficulty == .hard ? 270 :
+                              difficulty == .medium ? 225 : 175
+        let prediction: CGFloat = difficulty == .hard ? 0.42 :
+                                  difficulty == .medium ? 0.28 : 0.12
+        let predicted = CGPoint(
+            x: ship.position.x + velocity.dx * prediction,
+            y: ship.position.y + velocity.dy * prediction
+        )
+        let base = atan2(predicted.y - origin.y, predicted.x - origin.x)
+        let spread: CGFloat = difficulty == .hard ? 0.16 :
+                              difficulty == .medium ? 0.18 : 0.35
+        for index in 0..<count {
+            let offset = (CGFloat(index) - CGFloat(count - 1) / 2) * spread
+            let jitter = CGFloat.random(in: -0.065...0.065)
+            let angle = base + offset + jitter
+            let bullet = SKShapeNode(circleOfRadius: difficulty == .hard ? 3.6 : 3.0)
+            bullet.position = origin
+            bullet.fillColor = modern ? .systemRed : .white
+            bullet.strokeColor = .clear
+            bullet.glowWidth = modern ? 9 : 0
+            bullet.zPosition = 7
+            let tail = CGMutablePath()
+            tail.move(to: CGPoint(x: 0, y: 0))
+            tail.addLine(to: CGPoint(x: -cos(angle) * 16,
+                                     y: -sin(angle) * 16))
+            let streak = SKShapeNode(path: tail)
+            streak.strokeColor = modern ? .systemPink : .white
+            streak.lineWidth = 1.8
+            streak.alpha = 0.64
+            bullet.addChild(streak)
+            addChild(bullet)
+            enemyShots.append(EnemyShot(
+                node: bullet,
+                velocity: CGVector(dx: cos(angle) * speed,
+                                   dy: sin(angle) * speed),
+                remaining: 2.5
+            ))
+        }
     }
 
     private func updateEnemyShots(_ dt: CGFloat) {
@@ -2176,11 +2352,31 @@ final class DriftScene: SKScene {
         saucer = nil
         lastSaucer = elapsed
         nextSaucerDelay = CGFloat.random(in: difficulty.saucerDelay)
-        award(200)
+        award(300)
         ArcadeAudio.shared.play(.saucer)
+        ArcadeAudio.shared.playRockBreak(level: 5)
+        let primary = modern ? SKColor.systemRed : .white
+        ModernVisuals.burst(in: self, at: position, color: primary,
+                            count: modern ? 44 : 23)
         if modern {
-            ModernVisuals.burst(in: self, at: position, color: .systemPink, count: 20)
-            ModernVisuals.floatScore("+200", in: self, at: position)
+            ModernVisuals.burst(in: self, at: position, color: .systemOrange, count: 24)
+            ModernVisuals.floatScore("RAIDER +300", in: self, at: position)
+        }
+        for (index, radius) in [CGFloat(13), CGFloat(22)].enumerated() {
+            let shock = SKShapeNode(circleOfRadius: radius)
+            shock.position = position
+            shock.strokeColor = index == 0 ? primary : .systemOrange
+            shock.fillColor = .clear
+            shock.glowWidth = modern ? 18 : 0
+            shock.lineWidth = index == 0 ? 4 : 2
+            shock.zPosition = 14
+            addChild(shock)
+            let duration: Double = index == 0 ? 0.45 : 0.68
+            shock.run(.sequence([
+                .group([.scale(to: index == 0 ? 4.5 : 3.5, duration: duration),
+                        .fadeOut(withDuration: duration)]),
+                .removeFromParent()
+            ]))
         }
     }
 
