@@ -478,6 +478,14 @@ private struct Saucer {
     var node: SKShapeNode
     var velocity: CGVector
     var remaining: CGFloat
+    var decloakRemaining: CGFloat = 0
+}
+
+/// Solar-panel satellite is destructible; station is decorative only.
+private struct OrbitalTraffic {
+    var node: SKNode
+    var velocity: CGVector
+    var remaining: CGFloat
 }
 
 private struct EnemyShot {
@@ -527,6 +535,10 @@ final class DriftScene: SKScene {
     private var nextCometDelay: CGFloat = 13
     private var nextSpark: CGFloat = 0
     private var saucer: Saucer?
+    private var satellite: OrbitalTraffic?
+    private var station: OrbitalTraffic?
+    private var nextSatelliteAt: CGFloat = 20
+    private var nextStationAt: CGFloat = 36
     private var enemyShots: [EnemyShot] = []
     private var lastSaucer: CGFloat = 0
     private var nextSaucerDelay: CGFloat = 20
@@ -794,6 +806,7 @@ final class DriftScene: SKScene {
         nuclearMissile?.node.removeFromParent()
         nuclearMissile = nil
         clearEnemies()
+        clearOrbitalTraffic()
         boulders.removeAll()
         lasers.removeAll()
         held.removeAll()
@@ -816,6 +829,8 @@ final class DriftScene: SKScene {
         nextCometDelay = CGFloat.random(in: difficulty.cometDelay)
         lastSaucer = 0
         nextSaucerDelay = CGFloat.random(in: difficulty.saucerDelay)
+        nextSatelliteAt = 20
+        nextStationAt = 36
         lastSaucerShot = 0
         nextSpark = 0
         lastBeltSpawn = 0
@@ -1075,6 +1090,7 @@ final class DriftScene: SKScene {
         }
         updateNuclearMissile(dt)
         updateShockwaves(dt)
+        updateOrbitalTraffic(dt)
         if customRules?.saucerEnabled ?? true { updateSaucer(dt) }
         updateEnemyShots(dt)
         for i in lasers.indices.reversed() {
@@ -1089,9 +1105,16 @@ final class DriftScene: SKScene {
                 detonateComet(at: activeComet.node.position)
                 continue
             }
-            if let activeSaucer = saucer,
+            if let activeSatellite = satellite,
+               hypot(activeSatellite.node.position.x - lasers[i].node.position.x,
+                     activeSatellite.node.position.y - lasers[i].node.position.y) < 31 {
+                lasers.remove(at: i).node.removeFromParent()
+                destroySatellite(at: activeSatellite.node.position)
+                continue
+            }
+            if let activeSaucer = saucer, activeSaucer.decloakRemaining <= 0,
                hypot(activeSaucer.node.position.x - lasers[i].node.position.x,
-                     activeSaucer.node.position.y - lasers[i].node.position.y) < 26 {
+                     activeSaucer.node.position.y - lasers[i].node.position.y) < 29 {
                 lasers.remove(at: i).node.removeFromParent()
                 destroySaucer()
                 continue
@@ -1113,6 +1136,7 @@ final class DriftScene: SKScene {
                 hypot($0.node.position.x - ship.position.x,
                       $0.node.position.y - ship.position.y) < 15
             }) || (saucer.map {
+                $0.decloakRemaining <= 0 &&
                 hypot($0.node.position.x - ship.position.x,
                       $0.node.position.y - ship.position.y) < 34
             } ?? false)) {
@@ -1453,7 +1477,11 @@ final class DriftScene: SKScene {
         if let target = comet, hits(target.node.position, radius: 19) {
             detonateComet(at: target.node.position)
         }
-        if let target = saucer, hits(target.node.position, radius: 24) {
+        if let target = satellite, hits(target.node.position, radius: 28) {
+            destroySatellite(at: target.node.position)
+        }
+        if let target = saucer, target.decloakRemaining <= 0,
+           hits(target.node.position, radius: 27) {
             destroySaucer()
         }
         let originals = boulders.count
@@ -1983,7 +2011,12 @@ final class DriftScene: SKScene {
             destroyPlayerShip()
         }
 
-        // Destroy enemy hazards within blast radius.
+        // Destroy enemy hazards within blast radius. The station is immune.
+        if let target = satellite,
+           hypot(target.node.position.x - point.x,
+                 target.node.position.y - point.y) < radius {
+            destroySatellite(at: target.node.position)
+        }
         if let target = saucer, hypot(target.node.position.x - point.x,
                                       target.node.position.y - point.y) < radius {
             destroySaucer()
@@ -2274,6 +2307,7 @@ final class DriftScene: SKScene {
         lasers.forEach { $0.node.removeFromParent() }
         clearSpecialEffects()
         clearEnemies()
+        clearOrbitalTraffic()
         boulders.removeAll()
         lasers.removeAll()
         elapsed = CGFloat(snapshot.elapsed)
