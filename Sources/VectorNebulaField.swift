@@ -34,6 +34,10 @@ final class VectorNebulaField: SKNode {
     private var layers: [AnimatedLayer] = []
     private var backdropGroup: SKNode?
     private var sceneGeneration = 0
+    /// True only when actual sky textures have been created in a live SKScene.
+    /// Don't allocate the initial nebula inside init/didMove; on some Macs
+    /// that produces white placeholder surfaces until the first restart.
+    private(set) var isPrepared = false
     private var lastTime: CGFloat?
     /// Integrated ship travel in world points. Unlike an eased offset, this
     /// keeps accumulating while the ship is coasting, so depth is observable.
@@ -48,10 +52,20 @@ final class VectorNebulaField: SKNode {
         super.init()
         zPosition = -30
         isUserInteractionEnabled = false
-        createLayers()
+        // Intentionally defer texture generation until SpriteKit has presented
+        // the scene and begun drawing frames. This is the same GPU-ready state
+        // in which the existing new-game regenerate() reliably worked.
     }
 
     required init?(coder: NSCoder) { nil }
+
+    /// Called once from DriftScene.update after a few live display frames.
+    /// Until then the opaque dark scene floor and simple fallback stars render.
+    func prepareIfNeeded() {
+        guard !isPrepared else { return }
+        createLayers()
+        isPrepared = true
+    }
 
     func resize(to size: CGSize) {
         sceneSize = CGSize(width: max(1, size.width), height: max(1, size.height))
@@ -70,7 +84,10 @@ final class VectorNebulaField: SKNode {
     /// Build a new, genuinely random cloud bank and stellar population for
     /// each wave. Crossfading preserves the sense of traversing space.
     func regenerate() {
-        createLayers(transition: true)
+        // A user can press Return very quickly, before the deferred title
+        // preparation. New-game regeneration must work in either case.
+        createLayers(transition: isPrepared)
+        isPrepared = true
     }
 
     func warpBurst() {
@@ -203,12 +220,19 @@ final class VectorNebulaField: SKNode {
         updateLens()
 
         if let oldGroup {
-            group.alpha = 0
-            group.run(.fadeIn(withDuration: 1.5))
-            oldGroup.run(.sequence([
-                .fadeOut(withDuration: 1.5),
-                .removeFromParent()
-            ]))
+            if transition {
+                group.alpha = 0
+                group.run(.fadeIn(withDuration: 1.5))
+                oldGroup.run(.sequence([
+                    .fadeOut(withDuration: 1.5),
+                    .removeFromParent()
+                ]))
+            } else {
+                // Initialization/recovery must never crossfade an invalid
+                // first-frame image over the repaired starfield.
+                oldGroup.removeFromParent()
+                group.alpha = 1
+            }
         } else {
             group.alpha = 1
         }
