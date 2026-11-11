@@ -541,6 +541,9 @@ final class DriftScene: SKScene {
     // SwiftUI view timing, scene clear colors or procedural textures.
     private let spaceBackdrop = SKSpriteNode(color: .black, size: .zero)
     private var backgroundLayer: VectorNebulaField?
+    // Cold launch needs several live SpriteKit frames before generating the
+    // initial GPU textures. Gameplay regeneration already occurs after this.
+    private var presentationFrames = 0
     private var lastBeltSpawn: CGFloat = 0
     private let modernShipDetail = ModernVisuals.shipDetail()
     private let flame = ModernVisuals.engineFlame()
@@ -598,8 +601,9 @@ final class DriftScene: SKScene {
 
     override func didMove(to view: SKView) {
         if ready {
-            // SwiftUI can recreate the view while retaining this scene.
-            // Ensure our persistent backdrop is visible after reattachment.
+            // The scene may be reattached to a new NSView. Its prepared
+            // nebula survives; don't rebuild it in didMove().
+            presentationFrames = 0
             didChangeSize(size)
             updateStyle()
             return
@@ -883,7 +887,7 @@ final class DriftScene: SKScene {
         stageCaption.fontSize = 12
         stageCaption.fontColor = SKColor(calibratedWhite: 0.86, alpha: 0.94)
         stagePanel.isHidden = true
-        classicTitleStars.isHidden = modern
+        classicTitleStars.isHidden = !modern && !titleVisible
         stageHeading.position = CGPoint(x: size.width / 2, y: size.height / 2 - 6)
         stageCaption.position = CGPoint(x: size.width / 2, y: size.height / 2 - 42)
         stageHeading.isHidden = false
@@ -947,8 +951,15 @@ final class DriftScene: SKScene {
         let dt = lastTime == 0 ? CGFloat(1.0 / 60) : CGFloat(min(max(currentTime - lastTime, 0), 1.0 / 30))
         lastTime = currentTime
         guard ready else { return }
+        // Scene initialization runs before the renderer is ready on some Macs.
+        // The first launch used to create invalid/white nebula textures that
+        // were only repaired by pressing Return (which regenerated the sky).
+        // Prepare them after three actual update frames, not in didMove.
+        presentationFrames += 1
+        if modern && presentationFrames >= 3 {
+            backgroundLayer?.prepareIfNeeded()
+        }
         if titleVisible {
-            // Show the nebula in a gently animated attract mode before Return.
             elapsed += dt
             if modern {
                 backgroundLayer?.animate(time: elapsed, density: 0.45,
@@ -1623,7 +1634,9 @@ final class DriftScene: SKScene {
         }
         modernShipDetail.isHidden = !modern
         flame.isHidden = true
-        classicTitleStars.isHidden = modern || !titleVisible
+        // Simple dark-space stars remain available as a fallback until the
+        // first deferred Modern texture generation completes.
+        classicTitleStars.isHidden = !titleVisible
         // Keep the procedural scene alive during graphics-mode changes.
         // Recreating multiple shader textures on each toggle could render an
         // empty or white background until gameplay began.
