@@ -371,7 +371,9 @@ final class VectorNebulaField: SKNode {
             )
             if let transparent {
                 transparent.setColor(.clear, atX: 0, y: 0)
-                return SKTexture(image: transparent)
+                if let image = transparent.cgImage {
+                    return SKTexture(cgImage: image)
+                }
             }
             return SKTexture(image: NSImage(size: CGSize(width: 1, height: 1)))
         }
