@@ -195,8 +195,7 @@ enum ArcadeEffects {
         return root
     }
 
-    /// An unarmed, indestructible orbital-station silhouette. It's scenic
-    /// debris: shots, missiles, and collisions intentionally ignore it.
+    /// Indestructible orbital core with detachable exterior solar panels.
     static func station(modern: Bool, damage: Int = 0) -> SKNode {
         let root = SKNode()
         root.name = "orbitalStation"
@@ -212,7 +211,7 @@ enum ArcadeEffects {
         truss.lineWidth = 1
         root.addChild(truss)
         for side in [-1, 1] as [CGFloat] {
-            if (side < 0 && damage >= 3) || (side > 0 && damage >= 6) { continue }
+            if (side < 0 && damage >= 1) || (side > 0 && damage >= 3) { continue }
             let panel = SKNode()
             panel.name = side < 0 ? "stationLeftPanel" : "stationRightPanel"
             root.addChild(panel)
