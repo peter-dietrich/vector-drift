@@ -233,3 +233,13 @@ The title screen uses the gently breathing Modern nebula, or a subtle Classic st
 - The 2D telemetry and the 3D camera HUD display remaining charges or the recharge countdown.
 - Laser charge and recharge state are saved/restored in both 2D and 3D checkpoints, with older saves defaulting to a fully charged laser bank.
 - A short original synthesized laser sound accompanies each burst. The game clock halts the recharge on pause.
+
+
+## Startup screen reliability fix (November 2026)
+
+- The chosen Classic/Modern mode and difficulty are now assigned to `DriftScene` **before** `SKView.presentScene`; `updateNSView` also keeps the native scene synchronized when switching or returning from 3D Flight.
+- The scene owns a full-viewport opaque dark background at the lowest drawing depth, independent of the procedural nebula's texture-generation lifecycle. A failed nebula texture uses transparent fallback artwork rather than an uninitialized blank image.
+- Title/attract mode hides the ship and any residual gameplay asteroids, so no cyan ship fragments show up at screen edges.
+- The title has a larger high-contrast **PRESS RETURN TO BEGIN** prompt and keeps gameplay paused until Return.
+- Switching graphics mode refreshes the flight-profile readout immediately; selecting a difficulty on the title no longer automatically begins a game.
+- Test on Mac: cold-start into Modern; verify dark animated nebula, Modern telemetry, no ship; switch Classic → Modern → 3D Flight → Modern, then press Return and confirm regular gameplay.
