@@ -358,7 +358,23 @@ final class VectorNebulaField: SKNode {
     }
 
     private func makeTexture(_ ctx: CGContext?, blur: CGFloat = 0) -> SKTexture {
-        guard let image = ctx?.makeImage() else { return SKTexture(image: NSImage(size: sceneSize)) }
+        // A blank NSImage can become an opaque white texture on some macOS
+        // renderers. Never use it as the fallback for a full-screen layer.
+        // If bitmap creation fails, use a known transparent RGBA pixel so
+        // the scene's opaque black floor remains visible.
+        guard let image = ctx?.makeImage() else {
+            let transparent = NSBitmapImageRep(
+                bitmapDataPlanes: nil, pixelsWide: 1, pixelsHigh: 1,
+                bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
+                isPlanar: false, colorSpaceName: .deviceRGB,
+                bytesPerRow: 4, bitsPerPixel: 32
+            )
+            if let transparent {
+                transparent.setColor(.clear, atX: 0, y: 0)
+                return SKTexture(image: transparent)
+            }
+            return SKTexture(image: NSImage(size: CGSize(width: 1, height: 1)))
+        }
         let finalImage: CGImage
         if blur > 0 {
             let filter = CIFilter.gaussianBlur()
