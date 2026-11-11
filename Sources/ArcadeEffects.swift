@@ -59,26 +59,193 @@ enum ArcadeEffects {
         return node
     }
 
+    /// Original predatory alien raider inspired by the swept-wing language of
+    /// classic science-fiction spacecraft. Not a reproduction of any franchise ship.
     static func saucer(modern: Bool) -> SKShapeNode {
-        let p = CGMutablePath()
-        p.move(to: CGPoint(x: -24, y: 0))
-        p.addLine(to: CGPoint(x: -11, y: 10))
-        p.addLine(to: CGPoint(x: 11, y: 10))
-        p.addLine(to: CGPoint(x: 24, y: 0))
-        p.addLine(to: CGPoint(x: 12, y: -7))
-        p.addLine(to: CGPoint(x: -12, y: -7))
-        p.closeSubpath()
-        p.move(to: CGPoint(x: -11, y: 10))
-        p.addLine(to: CGPoint(x: -5, y: 18))
-        p.addLine(to: CGPoint(x: 6, y: 18))
-        p.addLine(to: CGPoint(x: 11, y: 10))
-        let ship = SKShapeNode(path: p)
-        ship.strokeColor = modern ? .systemPink : .white
-        ship.fillColor = .clear
-        ship.lineWidth = 2
-        ship.glowWidth = modern ? 8 : 0
-        ship.zPosition = 5
+        let hull = CGMutablePath()
+        hull.move(to: CGPoint(x: 29, y: 0))       // Forward beak
+        hull.addLine(to: CGPoint(x: 9, y: 7))
+        hull.addLine(to: CGPoint(x: -4, y: 13))
+        hull.addLine(to: CGPoint(x: -27, y: 24))    // Upper swept wing
+        hull.addLine(to: CGPoint(x: -15, y: 5))
+        hull.addLine(to: CGPoint(x: -18, y: 0))
+        hull.addLine(to: CGPoint(x: -15, y: -5))
+        hull.addLine(to: CGPoint(x: -27, y: -24))   // Lower swept wing
+        hull.addLine(to: CGPoint(x: -4, y: -13))
+        hull.addLine(to: CGPoint(x: 9, y: -7))
+        hull.closeSubpath()
+
+        let ship = SKShapeNode(path: hull)
+        ship.name = "alienRaider"
+        ship.strokeColor = modern ? .systemRed : .white
+        ship.fillColor = modern
+            ? SKColor(calibratedRed: 0.26, green: 0.04, blue: 0.10, alpha: 0.86)
+            : .black
+        ship.lineWidth = modern ? 2.7 : 1.7
+        ship.glowWidth = modern ? 9 : 0
+        ship.zPosition = 6
+
+        let panel = CGMutablePath()
+        panel.move(to: CGPoint(x: -20, y: 18))
+        panel.addLine(to: CGPoint(x: -6, y: 4))
+        panel.addLine(to: CGPoint(x: 17, y: 0))
+        panel.addLine(to: CGPoint(x: -6, y: -4))
+        panel.addLine(to: CGPoint(x: -20, y: -18))
+        let inlay = SKShapeNode(path: panel)
+        inlay.name = "raiderInlay"
+        inlay.strokeColor = modern ? .systemOrange : .white.withAlphaComponent(0.60)
+        inlay.lineWidth = 1.1
+        ship.addChild(inlay)
+
+        let bridge = SKShapeNode(ellipseOf: CGSize(width: 15, height: 8))
+        bridge.name = "raiderBridge"
+        bridge.position = CGPoint(x: 1, y: 0)
+        bridge.fillColor = modern ? .systemRed : .black
+        bridge.strokeColor = modern ? .systemPink : .white
+        bridge.lineWidth = 1
+        bridge.glowWidth = modern ? 4 : 0
+        ship.addChild(bridge)
+
+        for y in [-15, 15] as [CGFloat] {
+            let engine = SKShapeNode(circleOfRadius: 3)
+            engine.name = "raiderEngine"
+            engine.position = CGPoint(x: -23, y: y)
+            engine.fillColor = modern ? .systemOrange : .white
+            engine.strokeColor = .clear
+            engine.glowWidth = modern ? 7 : 0
+            ship.addChild(engine)
+        }
         return ship
+    }
+
+    static func styleRaider(_ ship: SKShapeNode, modern: Bool) {
+        ship.strokeColor = modern ? .systemRed : .white
+        ship.fillColor = modern
+            ? SKColor(calibratedRed: 0.26, green: 0.04, blue: 0.10, alpha: 0.86)
+            : .black
+        ship.glowWidth = modern ? 9 : 0
+        ship.lineWidth = modern ? 2.7 : 1.7
+        for case let part as SKShapeNode in ship.children {
+            switch part.name {
+            case "raiderInlay":
+                part.strokeColor = modern ? .systemOrange : .white.withAlphaComponent(0.6)
+            case "raiderBridge":
+                part.fillColor = modern ? .systemRed : .black
+                part.strokeColor = modern ? .systemPink : .white
+                part.glowWidth = modern ? 4 : 0
+            case "raiderEngine":
+                part.fillColor = modern ? .systemOrange : .white
+                part.glowWidth = modern ? 7 : 0
+            default: break
+            }
+        }
+    }
+
+    /// Flat-paneled communications satellite, with twin solar wings and an
+    /// articulated central bus; entirely procedural, not a branded asset.
+    static func satellite(modern: Bool) -> SKNode {
+        let root = SKNode()
+        root.name = "driftingSatellite"
+        root.zPosition = 4
+        let white = modern ? SKColor(calibratedWhite: 0.85, alpha: 1) : SKColor.white
+        let blue = modern
+            ? SKColor(calibratedRed: 0.12, green: 0.38, blue: 0.62, alpha: 0.94)
+            : SKColor.black
+        let rail = SKShapeNode(rectOf: CGSize(width: 100, height: 2))
+        rail.fillColor = white
+        rail.strokeColor = .clear
+        root.addChild(rail)
+        for side in [-1, 1] as [CGFloat] {
+            let wing = SKShapeNode(rectOf: CGSize(width: 36, height: 16), cornerRadius: 1.5)
+            wing.position = CGPoint(x: side * 35, y: 0)
+            wing.fillColor = blue
+            wing.strokeColor = white
+            wing.lineWidth = 1.5
+            root.addChild(wing)
+            for delta in [-9, 0, 9] as [CGFloat] {
+                let cell = SKShapeNode(rectOf: CGSize(width: 1, height: 14))
+                cell.position = CGPoint(x: side * 35 + delta, y: 0)
+                cell.fillColor = white.withAlphaComponent(0.58)
+                cell.strokeColor = .clear
+                root.addChild(cell)
+            }
+        }
+        let bus = SKShapeNode(rectOf: CGSize(width: 18, height: 12), cornerRadius: 2)
+        bus.fillColor = modern ? .darkGray : .black
+        bus.strokeColor = white
+        bus.lineWidth = 2
+        root.addChild(bus)
+        let antenna = SKShapeNode(circleOfRadius: 5)
+        antenna.position = CGPoint(x: 0, y: 12)
+        antenna.strokeColor = white
+        antenna.fillColor = .clear
+        antenna.lineWidth = 1.3
+        root.addChild(antenna)
+        let blink = SKShapeNode(circleOfRadius: 2)
+        blink.position = CGPoint(x: 0, y: -4)
+        blink.fillColor = modern ? .systemCyan : .white
+        blink.strokeColor = .clear
+        blink.glowWidth = modern ? 5 : 0
+        blink.run(.repeatForever(.sequence([
+            .fadeAlpha(to: 0.12, duration: 0.65),
+            .fadeAlpha(to: 1, duration: 0.20),
+            .wait(forDuration: 1.5)
+        ])))
+        root.addChild(blink)
+        return root
+    }
+
+    /// An unarmed, indestructible orbital-station silhouette. It's scenic
+    /// debris: shots, missiles, and collisions intentionally ignore it.
+    static func station(modern: Bool) -> SKNode {
+        let root = SKNode()
+        root.name = "orbitalStation"
+        root.zPosition = 1
+        let rim = modern ? SKColor(calibratedRed: 0.60, green: 0.77, blue: 0.85, alpha: 0.80)
+                         : SKColor(calibratedWhite: 0.8, alpha: 0.8)
+        let dark = modern ? SKColor(calibratedRed: 0.07, green: 0.13, blue: 0.23, alpha: 0.8)
+                          : SKColor.black
+
+        let truss = SKShapeNode(rectOf: CGSize(width: 118, height: 4))
+        truss.fillColor = dark
+        truss.strokeColor = rim
+        truss.lineWidth = 1
+        root.addChild(truss)
+        for side in [-1, 1] as [CGFloat] {
+            let wing = SKShapeNode(rectOf: CGSize(width: 34, height: 23))
+            wing.position = CGPoint(x: side * 79, y: 0)
+            wing.fillColor = dark
+            wing.strokeColor = rim
+            wing.lineWidth = 1.1
+            root.addChild(wing)
+            for lineX in [-10, 0, 10] as [CGFloat] {
+                let line = SKShapeNode(rectOf: CGSize(width: 0.9, height: 21))
+                line.fillColor = rim.withAlphaComponent(0.6)
+                line.strokeColor = .clear
+                line.position = CGPoint(x: side * 79 + lineX, y: 0)
+                root.addChild(line)
+            }
+        }
+        for x in [-35, 0, 35] as [CGFloat] {
+            let module = SKShapeNode(ellipseOf: CGSize(width: 32, height: 16))
+            module.position = CGPoint(x: x, y: 0)
+            module.fillColor = dark
+            module.strokeColor = rim
+            module.lineWidth = 1.4
+            root.addChild(module)
+        }
+        let ring = SKShapeNode(ellipseOf: CGSize(width: 43, height: 60))
+        ring.strokeColor = rim
+        ring.fillColor = .clear
+        ring.lineWidth = 1.9
+        root.addChild(ring)
+        let hatch = SKShapeNode(circleOfRadius: 9)
+        hatch.fillColor = dark
+        hatch.strokeColor = rim
+        hatch.lineWidth = 1.2
+        root.addChild(hatch)
+        root.alpha = 0.86
+        return root
     }
 
     static func damageCrack(radius: CGFloat) -> SKShapeNode {
