@@ -267,6 +267,12 @@ struct GameSnapshot: Codable {
     // Optional for backward-compatible decoding of older saved games.
     var ammoReserve: AmmoReserve?
     var beamBattery: BeamBattery?
+    // Optional so existing v1 save slots remain decodable.
+    var satellite: SavedMovingEnemy?
+    var station: SavedMovingEnemy?
+    var secondsUntilSatellite: Double?
+    var secondsUntilStation: Double?
+    var saucerDecloakRemaining: Double?
 }
 
 struct GameSaveSlot: Codable, Identifiable {
