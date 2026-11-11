@@ -1079,6 +1079,9 @@ final class DriftScene: SKScene {
             bounceShieldAsteroids()
         }
 
+        // Retain the bullet's previous position for continuous collision detection.
+        // Point-only tests can tunnel through thin station geometry at high speed.
+        let laserStarts = lasers.map { $0.node.position }
         for i in lasers.indices {
             lasers[i].remaining -= dt
             let next = CGPoint(x: lasers[i].node.position.x + lasers[i].velocity.dx * dt,
@@ -1114,8 +1117,10 @@ final class DriftScene: SKScene {
                 continue
             }
             if let activeStation = station,
-               stationContains(lasers[i].node.position, station: activeStation) {
-                let impact = lasers.remove(at: i).node.position
+               let impact = stationImpact(from: laserStarts[i],
+                                          to: lasers[i].node.position,
+                                          station: activeStation) {
+                lasers.remove(at: i).node.removeFromParent()
                 damageStation(at: impact)
                 continue
             }
@@ -1487,7 +1492,7 @@ final class DriftScene: SKScene {
         if let target = satellite, hits(target.node.position, radius: 28) {
             destroySatellite(at: target.node.position)
         }
-        if let target = station, hits(target.node.position, radius: 140 * target.node.xScale) {
+        if let target = station, hits(target.node.position, radius: 105 * target.node.xScale) {
             damageStation(at: target.node.position, force: 2)
         }
         if let target = saucer, target.decloakRemaining <= 0,
@@ -2212,15 +2217,35 @@ final class DriftScene: SKScene {
     }
 
 
-    /// Broad, rotated hit box following the station's hull and solar arrays.
-    /// The ship does not collide with this distant background object.
-    private func stationContains(_ point: CGPoint, station target: OrbitalTraffic) -> Bool {
-        let dx = point.x - target.node.position.x
-        let dy = point.y - target.node.position.y
-        let rotation = target.node.zRotation
-        let localX = (dx * cos(rotation) + dy * sin(rotation)) / max(0.01, target.node.xScale)
-        let localY = (-dx * sin(rotation) + dy * cos(rotation)) / max(0.01, target.node.yScale)
-        return abs(localX) < 101 && abs(localY) < 34
+    /// Continuous segment-vs-rotated-hull intersection in station coordinates.
+    /// This catches fast bullets crossing the station between rendered frames.
+    private func stationImpact(from start: CGPoint, to end: CGPoint,
+                               station target: OrbitalTraffic) -> CGPoint? {
+        // Edge-wrap teleports are not actual bullet trajectories.
+        guard abs(end.x - start.x) < size.width * 0.5,
+              abs(end.y - start.y) < size.height * 0.5 else { return nil }
+        let a = target.node.convert(start, from: self)
+        let b = target.node.convert(end, from: self)
+        let dx = b.x - a.x
+        let dy = b.y - a.y
+        var near: CGFloat = 0
+        var far: CGFloat = 1
+
+        // A little padding makes a clear visual hit reliable on narrow struts.
+        for (origin, delta, extent) in [(a.x, dx, CGFloat(107)),
+                                        (a.y, dy, CGFloat(37))] {
+            if abs(delta) < 0.0001 {
+                if abs(origin) > extent { return nil }
+            } else {
+                let entry = (-extent - origin) / delta
+                let exit = (extent - origin) / delta
+                near = max(near, min(entry, exit))
+                far = min(far, max(entry, exit))
+                if near > far { return nil }
+            }
+        }
+        let localImpact = CGPoint(x: a.x + dx * near, y: a.y + dy * near)
+        return target.node.convert(localImpact, to: self)
     }
 
     /// Impact scars and breakaway pieces progress without ever removing the
@@ -2237,29 +2262,34 @@ final class DriftScene: SKScene {
         spark.glowWidth = modern ? 13 : 2
         spark.zPosition = 8
         target.node.addChild(spark)
+        target.node.run(.sequence([.fadeAlpha(to: 0.4, duration: 0.07),
+                                   .fadeAlpha(to: 0.94, duration: 0.15)]))
         spark.run(.sequence([.group([.scale(to: 3.8, duration: 0.25),
                                      .fadeOut(withDuration: 0.25)]), .removeFromParent()]))
         if modern {
             ModernVisuals.burst(in: self, at: impact, color: .systemOrange, count: 9)
         }
         ArcadeAudio.shared.playRockBreak(level: 1)
-        if previous < 3 && stationDamage >= 3 {
+        // A hit must have an obvious consequence right away, not after
+        // several more shots. Two large panels detach on successive hits.
+        if previous < 1 && stationDamage >= 1 {
             releaseStationSection(named: "stationLeftPanel", from: target)
         }
-        if previous < 6 && stationDamage >= 6 {
+        if previous < 3 && stationDamage >= 3 {
             releaseStationSection(named: "stationRightPanel", from: target)
         }
         if stationDamage > previous {
             let scar = SKShapeNode(circleOfRadius: CGFloat.random(in: 3...7))
             scar.position = local
+            scar.setScale(2.0)
             scar.fillColor = .black
             scar.strokeColor = modern ? .systemOrange.withAlphaComponent(0.8) : .gray
             scar.lineWidth = 1
             scar.zPosition = 3
             target.node.addChild(scar)
-            // Small detached flecks even before an entire solar panel breaks free.
-            for _ in 0..<3 {
-                let fragment = SKShapeNode(rectOf: CGSize(width: CGFloat.random(in: 3...8), height: 2))
+            // Bright, persistent impact mark plus debris on *every* shot.
+            for _ in 0..<9 {
+                let fragment = SKShapeNode(rectOf: CGSize(width: CGFloat.random(in: 5...14), height: 3))
                 fragment.position = impact
                 fragment.fillColor = modern ? .gray : .white
                 fragment.strokeColor = modern ? .systemCyan : .white
@@ -2286,8 +2316,8 @@ final class DriftScene: SKScene {
         section.zPosition = 6
         addChild(section)
         section.run(.sequence([.group([
-            .moveBy(x: CGFloat.random(in: -170...170),
-                    y: CGFloat.random(in: -130...130), duration: 4.0),
+            .moveBy(x: CGFloat.random(in: -220...220),
+                    y: CGFloat.random(in: -165...165), duration: 4.0),
             .rotate(byAngle: CGFloat.random(in: -3.5...3.5), duration: 4.0),
             .fadeOut(withDuration: 4.0)
         ]), .removeFromParent()]))
