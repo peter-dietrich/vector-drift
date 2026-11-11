@@ -1657,8 +1657,7 @@ final class DriftScene: SKScene {
                                    remaining: shieldActive ? shieldEnergy : 0,
                                    total: difficulty.shieldDuration)
         if let saucer {
-            saucer.node.strokeColor = modern ? .systemPink : .white
-            saucer.node.glowWidth = modern ? 8 : 0
+            ArcadeEffects.styleRaider(saucer.node, modern: modern)
         }
         modernShipDetail.isHidden = !modern
         flame.isHidden = true
@@ -2068,6 +2067,11 @@ final class DriftScene: SKScene {
             shockwaves[i].ring.setScale(max(0.01, radius / 12))
             shockwaves[i].ring.alpha = 1 - progress
 
+            if let target = satellite,
+               hypot(target.node.position.x - shockwaves[i].center.x,
+                     target.node.position.y - shockwaves[i].center.y) <= radius + 26 {
+                destroySatellite(at: target.node.position)
+            }
             for j in boulders.indices.reversed() {
                 let rock = boulders[j]
                 let identity = ObjectIdentifier(rock.node)
@@ -2486,7 +2490,20 @@ final class DriftScene: SKScene {
             }, timeSinceBlackHole: Double(elapsed - lastBlackHole),
             nextBlackHoleDelay: Double(nextBlackHoleDelay),
             missilesRemaining: missilesRemaining, missile: missileState,
-            ammoReserve: ammo, beamBattery: beamBattery
+            ammoReserve: ammo, beamBattery: beamBattery,
+            satellite: satellite.map {
+                SavedMovingEnemy(position: snapshotPoint($0.node.position),
+                                 velocity: snapshotVelocity($0.velocity),
+                                 remaining: Double($0.remaining))
+            },
+            station: station.map {
+                SavedMovingEnemy(position: snapshotPoint($0.node.position),
+                                 velocity: snapshotVelocity($0.velocity),
+                                 remaining: Double($0.remaining))
+            },
+            secondsUntilSatellite: Double(max(0, nextSatelliteAt - elapsed)),
+            secondsUntilStation: Double(max(0, nextStationAt - elapsed)),
+            saucerDecloakRemaining: saucer.map { Double($0.decloakRemaining) }
         )
     }
 
@@ -2534,6 +2551,8 @@ final class DriftScene: SKScene {
         lastSaucer = elapsed - CGFloat(snapshot.timeSinceSaucer)
         nextSaucerDelay = CGFloat(snapshot.nextSaucerDelay)
         lastSaucerShot = elapsed - CGFloat(snapshot.timeSinceSaucerShot)
+        nextSatelliteAt = elapsed + CGFloat(snapshot.secondsUntilSatellite ?? 20)
+        nextStationAt = elapsed + CGFloat(snapshot.secondsUntilStation ?? 36)
         missilesRemaining = snapshot.missilesRemaining
         lastBeltSpawn = elapsed
         lastBlackHole = elapsed - CGFloat(snapshot.timeSinceBlackHole)
@@ -2591,9 +2610,32 @@ final class DriftScene: SKScene {
         if let saved = snapshot.saucer {
             let node = ArcadeEffects.saucer(modern: modern)
             node.position = point(saved.position)
+            if saved.velocity.x < 0 { node.xScale = -1 }
+            let cloak = max(0, CGFloat(snapshot.saucerDecloakRemaining ?? 0))
+            if cloak > 0 {
+                node.alpha = 0.12
+                node.run(.fadeIn(withDuration: Double(cloak)))
+            }
             addChild(node)
             saucer = Saucer(node: node, velocity: vector(saved.velocity),
-                            remaining: CGFloat(saved.remaining))
+                            remaining: CGFloat(saved.remaining),
+                            decloakRemaining: cloak)
+        }
+        if let saved = snapshot.satellite {
+            let node = ArcadeEffects.satellite(modern: modern)
+            node.position = point(saved.position)
+            addChild(node)
+            satellite = OrbitalTraffic(node: node,
+                                       velocity: vector(saved.velocity),
+                                       remaining: CGFloat(saved.remaining))
+        }
+        if let saved = snapshot.station {
+            let node = ArcadeEffects.station(modern: modern)
+            node.position = point(saved.position)
+            addChild(node)
+            station = OrbitalTraffic(node: node,
+                                     velocity: vector(saved.velocity),
+                                     remaining: CGFloat(saved.remaining))
         }
         for saved in snapshot.shockwaves {
             let ring = ModernVisuals.shockRing(at: point(saved.center))
