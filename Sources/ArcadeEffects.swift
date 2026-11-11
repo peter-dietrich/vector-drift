@@ -197,7 +197,7 @@ enum ArcadeEffects {
 
     /// An unarmed, indestructible orbital-station silhouette. It's scenic
     /// debris: shots, missiles, and collisions intentionally ignore it.
-    static func station(modern: Bool) -> SKNode {
+    static func station(modern: Bool, damage: Int = 0) -> SKNode {
         let root = SKNode()
         root.name = "orbitalStation"
         root.zPosition = 1
@@ -212,18 +212,22 @@ enum ArcadeEffects {
         truss.lineWidth = 1
         root.addChild(truss)
         for side in [-1, 1] as [CGFloat] {
+            if (side < 0 && damage >= 3) || (side > 0 && damage >= 6) { continue }
+            let panel = SKNode()
+            panel.name = side < 0 ? "stationLeftPanel" : "stationRightPanel"
+            root.addChild(panel)
             let wing = SKShapeNode(rectOf: CGSize(width: 34, height: 23))
             wing.position = CGPoint(x: side * 79, y: 0)
             wing.fillColor = dark
             wing.strokeColor = rim
             wing.lineWidth = 1.1
-            root.addChild(wing)
+            panel.addChild(wing)
             for lineX in [-10, 0, 10] as [CGFloat] {
                 let line = SKShapeNode(rectOf: CGSize(width: 0.9, height: 21))
                 line.fillColor = rim.withAlphaComponent(0.6)
                 line.strokeColor = .clear
                 line.position = CGPoint(x: side * 79 + lineX, y: 0)
-                root.addChild(line)
+                panel.addChild(line)
             }
         }
         for x in [-35, 0, 35] as [CGFloat] {
@@ -244,7 +248,7 @@ enum ArcadeEffects {
         hatch.strokeColor = rim
         hatch.lineWidth = 1.2
         root.addChild(hatch)
-        root.alpha = 0.86
+        root.alpha = 0.94
         return root
     }
 
