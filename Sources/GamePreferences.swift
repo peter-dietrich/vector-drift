@@ -272,6 +272,7 @@ struct GameSnapshot: Codable {
     var station: SavedMovingEnemy?
     var secondsUntilSatellite: Double?
     var secondsUntilStation: Double?
+    var stationDamageCount: Int?
     var saucerDecloakRemaining: Double?
 }
 
