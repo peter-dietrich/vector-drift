@@ -243,3 +243,18 @@ The title screen uses the gently breathing Modern nebula, or a subtle Classic st
 - The title has a larger high-contrast **PRESS RETURN TO BEGIN** prompt and keeps gameplay paused until Return.
 - Switching graphics mode refreshes the flight-profile readout immediately; selecting a difficulty on the title no longer automatically begins a game.
 - Test on Mac: cold-start into Modern; verify dark animated nebula, Modern telemetry, no ship; switch Classic → Modern → 3D Flight → Modern, then press Return and confirm regular gameplay.
+
+## Orbital traffic and alien-raider encounters (November 2026)
+
+- **Solar-panel satellite:** A procedurally drawn, Starlink-style satellite crosses the 2D playfield every **20 seconds of active gameplay** (not while paused or on the title screen). It drifts across rather than wrapping around. Hit it with regular bullets, the Shift+Space laser, or an explosive blast to shatter it into luminous fragments and score **350 points**.
+- **Orbital station:** A large original modular space-station silhouette drifts through approximately every **56 seconds**, with its first appearance around 36 seconds. It is **noncombat scenery**, not a target: bullets, lasers, black holes and nuclear blasts cannot destroy it, and it does not collide with the player.
+- **Swept-wing raider:** Replaces the red saucer with an original predatory, birdlike sci-fi silhouette, featuring a sharp beak, asymmetric-looking swept wing edges, accent panels and engine glows. This is custom art and not a franchise model.
+- **Decloaking entrance:** Raiders arrive almost invisible, flicker into view over about **1.1 seconds**, and cannot attack or collide with the ship until fully revealed.
+- **Aggressive but achievable combat:** Easy fires one moderately inaccurate shot per ~2.45 seconds; Medium fires two aimed projectiles every ~1.65 seconds; Hard fires three, with limited predictive aiming, every ~1.05 seconds. Enemy projectile counts are capped and preserve shield and respawn protection.
+- **Enhanced raider destruction:** Multiple radial shock rings, warm/cool fragment showers, a stronger fracture sound and **300 points**.
+- **Save/Resume:** Satellite and station positions, velocities, visit timers, and raider decloaking state are persisted in optional checkpoint fields. Existing saved games remain compatible.
+- These additions apply to **Classic and Modern 2D**; 3D Flight remains unchanged.
+
+### Quick playtest
+
+Launch a new game, stay alive until the first satellite flies through at ~20 seconds, shoot it, then wait for the orbital station around ~36 seconds. After wave two, watch the raider decloak and fire a fan of shots. Switch between Classic and Modern for each encounter, and confirm shields and save/resume still work.
