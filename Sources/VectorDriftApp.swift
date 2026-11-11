@@ -481,7 +481,7 @@ private struct Saucer {
     var decloakRemaining: CGFloat = 0
 }
 
-/// Solar-panel satellite is destructible; station is decorative only.
+/// Orbital flybys: satellites are destructible; station structures take limited cosmetic damage.
 private struct OrbitalTraffic {
     var node: SKNode
     var velocity: CGVector
@@ -537,6 +537,7 @@ final class DriftScene: SKScene {
     private var saucer: Saucer?
     private var satellite: OrbitalTraffic?
     private var station: OrbitalTraffic?
+    private var stationDamage = 0
     private var nextSatelliteAt: CGFloat = 20
     private var nextStationAt: CGFloat = 36
     private var enemyShots: [EnemyShot] = []
@@ -1112,6 +1113,12 @@ final class DriftScene: SKScene {
                 destroySatellite(at: activeSatellite.node.position)
                 continue
             }
+            if let activeStation = station,
+               stationContains(lasers[i].node.position, station: activeStation) {
+                let impact = lasers.remove(at: i).node.position
+                damageStation(at: impact)
+                continue
+            }
             if let activeSaucer = saucer, activeSaucer.decloakRemaining <= 0,
                hypot(activeSaucer.node.position.x - lasers[i].node.position.x,
                      activeSaucer.node.position.y - lasers[i].node.position.y) < 29 {
@@ -1479,6 +1486,9 @@ final class DriftScene: SKScene {
         }
         if let target = satellite, hits(target.node.position, radius: 28) {
             destroySatellite(at: target.node.position)
+        }
+        if let target = station, hits(target.node.position, radius: 140 * target.node.xScale) {
+            damageStation(at: target.node.position, force: 2)
         }
         if let target = saucer, target.decloakRemaining <= 0,
            hits(target.node.position, radius: 27) {
@@ -2010,11 +2020,16 @@ final class DriftScene: SKScene {
             destroyPlayerShip()
         }
 
-        // Destroy enemy hazards within blast radius. The station is immune.
+        // Destroy enemy hazards. Orbital station remains indestructible but sheds debris.
         if let target = satellite,
            hypot(target.node.position.x - point.x,
                  target.node.position.y - point.y) < radius {
             destroySatellite(at: target.node.position)
+        }
+        if let target = station,
+           hypot(target.node.position.x - point.x,
+                 target.node.position.y - point.y) < radius + 110 * target.node.xScale {
+            damageStation(at: target.node.position, force: 3)
         }
         if let target = saucer, hypot(target.node.position.x - point.x,
                                       target.node.position.y - point.y) < radius {
@@ -2072,6 +2087,15 @@ final class DriftScene: SKScene {
                      target.node.position.y - shockwaves[i].center.y) <= radius + 26 {
                 destroySatellite(at: target.node.position)
             }
+            if let target = station {
+                let identity = ObjectIdentifier(target.node)
+                if !shockwaves[i].hit.contains(identity),
+                   hypot(target.node.position.x - shockwaves[i].center.x,
+                         target.node.position.y - shockwaves[i].center.y) < radius + 105 * target.node.xScale {
+                    shockwaves[i].hit.insert(identity)
+                    damageStation(at: target.node.position, force: 2)
+                }
+            }
             for j in boulders.indices.reversed() {
                 let rock = boulders[j]
                 let identity = ObjectIdentifier(rock.node)
@@ -2103,11 +2127,12 @@ final class DriftScene: SKScene {
         satellite = nil
         station?.node.removeFromParent()
         station = nil
+        stationDamage = 0
     }
 
     /// Timeline-based orbital flybys, driven by game time (not wall time).
     /// Each new satellite is scheduled every twenty seconds. The station
-    /// floats by less often and is not part of any combat collision set.
+    /// floats by less often. Hits can damage detachable structures but not its core.
     private func updateOrbitalTraffic(_ dt: CGFloat) {
         if elapsed >= nextSatelliteAt {
             while elapsed >= nextSatelliteAt { nextSatelliteAt += 20 }
@@ -2138,8 +2163,8 @@ final class DriftScene: SKScene {
             object.node.position.y += object.velocity.dy * dt
             object.node.zRotation += dt * 0.018
             if object.remaining <= 0 ||
-                object.node.position.x < -155 ||
-                object.node.position.x > size.width + 155 {
+                object.node.position.x < -280 ||
+                object.node.position.x > size.width + 280 {
                 object.node.removeFromParent()
                 station = nil
             } else {
@@ -2170,19 +2195,102 @@ final class DriftScene: SKScene {
     private func spawnStation() {
         let fromLeft = Bool.random()
         let direction: CGFloat = fromLeft ? 1 : -1
+        stationDamage = 0
         let node = ArcadeEffects.station(modern: modern)
         node.position = CGPoint(
-            x: fromLeft ? -145 : size.width + 145,
+            x: fromLeft ? -270 : size.width + 270,
             y: CGFloat.random(in: size.height * 0.24...size.height * 0.73)
         )
-        node.setScale(CGFloat.random(in: 0.75...1.05))
+        node.setScale(CGFloat.random(in: 1.45...1.75))
         addChild(node)
         let speed = CGFloat.random(in: 70...100)
         station = OrbitalTraffic(
             node: node,
             velocity: CGVector(dx: direction * speed, dy: CGFloat.random(in: -5...5)),
-            remaining: (size.width + 320) / speed + 1.5
+            remaining: (size.width + 560) / speed + 1.5
         )
+    }
+
+
+    /// Broad, rotated hit box following the station's hull and solar arrays.
+    /// The ship does not collide with this distant background object.
+    private func stationContains(_ point: CGPoint, station target: OrbitalTraffic) -> Bool {
+        let dx = point.x - target.node.position.x
+        let dy = point.y - target.node.position.y
+        let rotation = target.node.zRotation
+        let localX = (dx * cos(rotation) + dy * sin(rotation)) / max(0.01, target.node.xScale)
+        let localY = (-dx * sin(rotation) + dy * cos(rotation)) / max(0.01, target.node.yScale)
+        return abs(localX) < 101 && abs(localY) < 34
+    }
+
+    /// Impact scars and breakaway pieces progress without ever removing the
+    /// central station. Debris has its own velocity and expires off-screen.
+    private func damageStation(at impact: CGPoint, force: Int = 1) {
+        guard let target = station else { return }
+        let previous = stationDamage
+        stationDamage = min(8, stationDamage + force)
+        let local = target.node.convert(impact, from: self)
+        let spark = SKShapeNode(circleOfRadius: 4)
+        spark.position = local
+        spark.fillColor = modern ? .systemOrange : .white
+        spark.strokeColor = .clear
+        spark.glowWidth = modern ? 13 : 2
+        spark.zPosition = 8
+        target.node.addChild(spark)
+        spark.run(.sequence([.group([.scale(to: 3.8, duration: 0.25),
+                                     .fadeOut(withDuration: 0.25)]), .removeFromParent()]))
+        if modern {
+            ModernVisuals.burst(in: self, at: impact, color: .systemOrange, count: 9)
+        }
+        ArcadeAudio.shared.playRockBreak(level: 1)
+        if previous < 3 && stationDamage >= 3 {
+            releaseStationSection(named: "stationLeftPanel", from: target)
+        }
+        if previous < 6 && stationDamage >= 6 {
+            releaseStationSection(named: "stationRightPanel", from: target)
+        }
+        if stationDamage > previous {
+            let scar = SKShapeNode(circleOfRadius: CGFloat.random(in: 3...7))
+            scar.position = local
+            scar.fillColor = .black
+            scar.strokeColor = modern ? .systemOrange.withAlphaComponent(0.8) : .gray
+            scar.lineWidth = 1
+            scar.zPosition = 3
+            target.node.addChild(scar)
+            // Small detached flecks even before an entire solar panel breaks free.
+            for _ in 0..<3 {
+                let fragment = SKShapeNode(rectOf: CGSize(width: CGFloat.random(in: 3...8), height: 2))
+                fragment.position = impact
+                fragment.fillColor = modern ? .gray : .white
+                fragment.strokeColor = modern ? .systemCyan : .white
+                fragment.zPosition = 7
+                addChild(fragment)
+                let delta = CGVector(dx: CGFloat.random(in: -140...140),
+                                     dy: CGFloat.random(in: -110...110))
+                fragment.run(.sequence([.group([
+                    .moveBy(x: delta.dx, y: delta.dy, duration: 2.2),
+                    .rotate(byAngle: CGFloat.random(in: -4...4), duration: 2.2),
+                    .fadeOut(withDuration: 2.2)
+                ]), .removeFromParent()]))
+            }
+        }
+    }
+
+    private func releaseStationSection(named name: String, from target: OrbitalTraffic) {
+        guard let section = target.node.childNode(withName: name) else { return }
+        let location = target.node.convert(section.position, to: self)
+        section.removeFromParent()
+        section.position = location
+        section.zRotation = target.node.zRotation
+        section.setScale(target.node.xScale)
+        section.zPosition = 6
+        addChild(section)
+        section.run(.sequence([.group([
+            .moveBy(x: CGFloat.random(in: -170...170),
+                    y: CGFloat.random(in: -130...130), duration: 4.0),
+            .rotate(byAngle: CGFloat.random(in: -3.5...3.5), duration: 4.0),
+            .fadeOut(withDuration: 4.0)
+        ]), .removeFromParent()]))
     }
 
     private func destroySatellite(at point: CGPoint) {
@@ -2503,6 +2611,7 @@ final class DriftScene: SKScene {
             },
             secondsUntilSatellite: Double(max(0, nextSatelliteAt - elapsed)),
             secondsUntilStation: Double(max(0, nextStationAt - elapsed)),
+            stationDamageCount: stationDamage,
             saucerDecloakRemaining: saucer.map { Double($0.decloakRemaining) }
         )
     }
@@ -2553,6 +2662,7 @@ final class DriftScene: SKScene {
         lastSaucerShot = elapsed - CGFloat(snapshot.timeSinceSaucerShot)
         nextSatelliteAt = elapsed + CGFloat(snapshot.secondsUntilSatellite ?? 20)
         nextStationAt = elapsed + CGFloat(snapshot.secondsUntilStation ?? 36)
+        stationDamage = min(8, max(0, snapshot.stationDamageCount ?? 0))
         missilesRemaining = snapshot.missilesRemaining
         lastBeltSpawn = elapsed
         lastBlackHole = elapsed - CGFloat(snapshot.timeSinceBlackHole)
@@ -2630,7 +2740,8 @@ final class DriftScene: SKScene {
                                        remaining: CGFloat(saved.remaining))
         }
         if let saved = snapshot.station {
-            let node = ArcadeEffects.station(modern: modern)
+            let node = ArcadeEffects.station(modern: modern, damage: stationDamage)
+            node.setScale(1.6)
             node.position = point(saved.position)
             addChild(node)
             station = OrbitalTraffic(node: node,
