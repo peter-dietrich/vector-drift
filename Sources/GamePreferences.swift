@@ -274,6 +274,11 @@ struct GameSnapshot: Codable {
     var secondsUntilStation: Double?
     var stationDamageCount: Int?
     var saucerDecloakRemaining: Double?
+    // Optional for compatibility with save files created before raider tactics.
+    var raiderTactic: String?
+    var raiderTacticRemaining: Double?
+    var raiderFlankDirection: Double?
+    var raiderCruiseSpeed: Double?
 }
 
 struct GameSaveSlot: Codable, Identifiable {
