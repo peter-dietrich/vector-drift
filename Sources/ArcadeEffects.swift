@@ -195,59 +195,102 @@ enum ArcadeEffects {
         return root
     }
 
-    /// Indestructible orbital core with detachable exterior solar panels.
+    /// ISS-inspired procedural silhouette with four detachable photovoltaic
+    /// wings, transverse truss, radiators, and pressurized modules. No NASA image
+    /// assets are embedded: geometry is composed from SpriteKit primitives.
     static func station(modern: Bool, damage: Int = 0) -> SKNode {
         let root = SKNode()
         root.name = "orbitalStation"
-        root.zPosition = 1
-        let rim = modern ? SKColor(calibratedRed: 0.60, green: 0.77, blue: 0.85, alpha: 0.80)
-                         : SKColor(calibratedWhite: 0.8, alpha: 0.8)
-        let dark = modern ? SKColor(calibratedRed: 0.07, green: 0.13, blue: 0.23, alpha: 0.8)
-                          : SKColor.black
+        root.zPosition = 4
+        let metal = SKColor(calibratedRed: 0.73, green: 0.82, blue: 0.87, alpha: 1)
+        let shadow = SKColor(calibratedRed: 0.19, green: 0.29, blue: 0.39, alpha: 1)
+        let solar = modern
+            ? SKColor(calibratedRed: 0.21, green: 0.33, blue: 0.57, alpha: 1)
+            : SKColor(calibratedWhite: 0.42, alpha: 1)
+        let copper = SKColor(calibratedRed: 0.76, green: 0.47, blue: 0.23, alpha: 1)
 
-        let truss = SKShapeNode(rectOf: CGSize(width: 118, height: 4))
-        truss.fillColor = dark
-        truss.strokeColor = rim
-        truss.lineWidth = 1
-        root.addChild(truss)
-        for side in [-1, 1] as [CGFloat] {
-            if (side < 0 && damage >= 1) || (side > 0 && damage >= 3) { continue }
+        func beam(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat,
+                  parent: SKNode = root) {
+            let shape = SKShapeNode(rectOf: CGSize(width: w, height: h))
+            shape.position = CGPoint(x: x, y: y)
+            shape.strokeColor = metal
+            shape.fillColor = shadow
+            shape.lineWidth = 1
+            parent.addChild(shape)
+        }
+        // The recognizable 250-point main ISS truss, with repeating bracing.
+        beam(0, 0, 245, 6)
+        beam(0, 8, 235, 2)
+        beam(0, -8, 235, 2)
+        for x in stride(from: -112, through: 112, by: 16) {
+            beam(CGFloat(x), 0, 1.6, 15)
+        }
+        // Four distinct, detachable solar-array assemblies spanning both sides.
+        // Numbered in the order they detach; damage is persisted in saves.
+        for index in 0..<4 {
+            if damage >= index + 1 { continue }
+            let side: CGFloat = index < 2 ? -1 : 1
+            let slot: CGFloat = index.isMultiple(of: 2) ? 0 : 1
             let panel = SKNode()
-            panel.name = side < 0 ? "stationLeftPanel" : "stationRightPanel"
+            panel.name = "stationArray\(index)"
+            panel.position = CGPoint(x: side * (79 + slot * 40), y: 0)
             root.addChild(panel)
-            let wing = SKShapeNode(rectOf: CGSize(width: 34, height: 23))
-            wing.position = CGPoint(x: side * 79, y: 0)
-            wing.fillColor = dark
-            wing.strokeColor = rim
-            wing.lineWidth = 1.1
-            panel.addChild(wing)
-            for lineX in [-10, 0, 10] as [CGFloat] {
-                let line = SKShapeNode(rectOf: CGSize(width: 0.9, height: 21))
-                line.fillColor = rim.withAlphaComponent(0.6)
-                line.strokeColor = .clear
-                line.position = CGPoint(x: side * 79 + lineX, y: 0)
-                panel.addChild(line)
+            beam(0, 0, 3, 88, parent: panel)
+            for half in [-1, 1] as [CGFloat] {
+                let wing = SKShapeNode(rectOf: CGSize(width: 28, height: 38))
+                wing.position = CGPoint(x: 0, y: half * 24)
+                wing.strokeColor = metal
+                wing.fillColor = solar
+                wing.lineWidth = 1.1
+                panel.addChild(wing)
+                for y in [-12, -4, 4, 12] as [CGFloat] {
+                    beam(0, half * 24 + y, 27, 0.65, parent: panel)
+                }
+                for x in [-9, 0, 9] as [CGFloat] {
+                    beam(x, half * 24, 0.6, 37, parent: panel)
+                }
             }
+            let pivot = SKShapeNode(circleOfRadius: 4)
+            pivot.fillColor = copper
+            pivot.strokeColor = metal
+            pivot.lineWidth = 1.1
+            panel.addChild(pivot)
         }
-        for x in [-35, 0, 35] as [CGFloat] {
-            let module = SKShapeNode(ellipseOf: CGSize(width: 32, height: 16))
-            module.position = CGPoint(x: x, y: 0)
-            module.fillColor = dark
-            module.strokeColor = rim
-            module.lineWidth = 1.4
-            root.addChild(module)
+
+        // White thermal radiator rectangles near the main truss.
+        for x in [-45, -25, 25, 45] as [CGFloat] {
+            let radiator = SKShapeNode(rectOf: CGSize(width: 14, height: 26))
+            radiator.position = CGPoint(x: x, y: 22)
+            radiator.fillColor = metal.withAlphaComponent(0.88)
+            radiator.strokeColor = .white
+            radiator.lineWidth = 0.8
+            root.addChild(radiator)
         }
-        let ring = SKShapeNode(ellipseOf: CGSize(width: 43, height: 60))
-        ring.strokeColor = rim
-        ring.fillColor = .clear
-        ring.lineWidth = 1.9
-        root.addChild(ring)
-        let hatch = SKShapeNode(circleOfRadius: 9)
-        hatch.fillColor = dark
-        hatch.strokeColor = rim
-        hatch.lineWidth = 1.2
-        root.addChild(hatch)
-        root.alpha = 0.94
+        // Longitudinal pressurized module spine: Unity/Destiny/Zvezda silhouette.
+        beam(0, -18, 13, 93)
+        for (y, w, h) in [(-58.0, 22.0, 29.0), (-28.0, 26.0, 28.0),
+                          (3.0, 20.0, 24.0), (37.0, 19.0, 34.0)] {
+            let lab = SKShapeNode(ellipseOf: CGSize(width: w, height: h))
+            lab.position = CGPoint(x: 0, y: y)
+            lab.strokeColor = metal
+            lab.fillColor = shadow
+            lab.lineWidth = 2
+            root.addChild(lab)
+        }
+        // Cross-axis laboratory, exposed equipment, cupola and docking node.
+        beam(22, -24, 40, 14)
+        let dock = SKShapeNode(circleOfRadius: 8)
+        dock.position = CGPoint(x: 44, y: -24)
+        dock.fillColor = shadow
+        dock.strokeColor = metal
+        dock.lineWidth = 2
+        root.addChild(dock)
+        let cupola = SKShapeNode(circleOfRadius: 5)
+        cupola.position = CGPoint(x: -13, y: -39)
+        cupola.fillColor = modern ? .systemCyan : .white
+        cupola.strokeColor = metal
+        root.addChild(cupola)
+        root.alpha = 0.96
         return root
     }
 
