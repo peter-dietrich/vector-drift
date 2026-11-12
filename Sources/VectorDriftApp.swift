@@ -177,9 +177,15 @@ private struct GameWindow: View {
             VStack(spacing: 10) {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("VECTOR DRIFT")
-                            .font(.system(size: 19, weight: .black, design: .monospaced))
-                            .foregroundStyle(.white)
+                        HStack(alignment: .firstTextBaseline, spacing: 9) {
+                            Text("VECTOR DRIFT")
+                                .font(.system(size: 19, weight: .black, design: .monospaced))
+                                .foregroundStyle(.white)
+                            Text("v2026.11.12c")
+                                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                                .foregroundStyle(.gray)
+                                .help("Source build identifier: v2026.11.12c")
+                        }
                         Text("ARCADE  /  MACOS   •   ISS TEST BUILD 2026.11.12b")
                             .font(.system(size: 9, weight: .semibold, design: .monospaced))
                             .foregroundStyle(.cyan.opacity(0.7))
