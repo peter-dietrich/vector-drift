@@ -181,22 +181,16 @@ private struct GameWindow: View {
                             Text("VECTOR DRIFT")
                                 .font(.system(size: 19, weight: .black, design: .monospaced))
                                 .foregroundStyle(.white)
-                            Text("v2026.11.12g")
+                            Text("v2026.11.12h")
                                 .font(.system(size: 10, weight: .medium, design: .monospaced))
                                 .foregroundStyle(.gray)
-                                .help("Source build identifier: v2026.11.12g")
+                                .help("Source build identifier: v2026.11.12h")
                         }
-                        Text("ARCADE  /  MACOS   •   ISS TEST BUILD 2026.11.12b")
+                        Text("ARCADE  /  MACOS")
                             .font(.system(size: 9, weight: .semibold, design: .monospaced))
                             .foregroundStyle(.cyan.opacity(0.7))
                     }
                     Spacer()
-                    Button("ISS Test") {
-                        if mode != Look.flight3D.rawValue {
-                            game.spawnTestStation()
-                        }
-                    }
-                    .help("Bring an ISS-style station into view to test bullet impacts")
                     Button("Custom Game") { showPreferences = true }
                     Button("Save Game") {
                         if mode == Look.flight3D.rawValue {
@@ -486,11 +480,19 @@ private struct Comet {
     var remaining: CGFloat
 }
 
+private enum RaiderTactic: String, CaseIterable {
+    case strafe, flank, retreat
+}
+
 private struct Saucer {
     var node: SKShapeNode
     var velocity: CGVector
     var remaining: CGFloat
     var decloakRemaining: CGFloat = 0
+    var tactic: RaiderTactic = .strafe
+    var tacticRemaining: CGFloat = 4
+    var flankDirection: CGFloat = 1
+    var cruiseSpeed: CGFloat = 110
 }
 
 /// Orbital flybys: satellites are destructible; station structures take limited cosmetic damage.
@@ -2276,31 +2278,6 @@ final class DriftScene: SKScene {
                                    remaining: route.lifetime)
     }
 
-    /// Manual runtime verification: place the current ISS asset near the ship,
-    /// so testing cannot depend on waiting for a random flyby.
-    func spawnTestStation() {
-        guard ready else { return }
-        station?.node.removeFromParent()
-        station = nil
-        stationDamage = 0
-        let node = ArcadeEffects.station(modern: modern)
-        node.position = CGPoint(x: size.width * 0.60, y: size.height * 0.55)
-        node.setScale(1.116)
-        addChild(node)
-        station = OrbitalTraffic(node: node,
-                                 velocity: .zero,
-                                 remaining: 50)
-        let note = SKLabelNode(fontNamed: "Menlo-Bold")
-        note.text = "ISS TEST  •  SHOOT SOLAR ARRAYS"
-        note.fontSize = 13
-        note.fontColor = .systemCyan
-        note.position = CGPoint(x: node.position.x, y: node.position.y + 124)
-        note.zPosition = 16
-        addChild(note)
-        note.run(.sequence([.wait(forDuration: 3), .fadeOut(withDuration: 0.5),
-                            .removeFromParent()]))
-    }
-
     private func spawnStation() {
         stationDamage = 0
         let node = ArcadeEffects.station(modern: modern)
@@ -2469,29 +2446,80 @@ final class DriftScene: SKScene {
         enemyShots.removeAll()
     }
 
+    /// Smooth acceleration toward short tactical objectives, not instant
+    /// heading changes. No extra enemy projectiles or collision damage.
+    private func steerRaider(_ enemy: inout Saucer, toward wanted: CGVector,
+                             dt: CGFloat) {
+        let speed = max(1, hypot(wanted.dx, wanted.dy))
+        let cruise = max(80, enemy.cruiseSpeed)
+        let desired = CGVector(dx: wanted.dx / speed * cruise,
+                               dy: wanted.dy / speed * cruise)
+        let maxDelta = CGFloat(difficulty == .hard ? 115 : 85) * dt
+        let dx = desired.dx - enemy.velocity.dx
+        let dy = desired.dy - enemy.velocity.dy
+        let length = max(1, hypot(dx, dy))
+        let factor = min(1, maxDelta / length)
+        enemy.velocity.dx += dx * factor
+        enemy.velocity.dy += dy * factor
+    }
+
     private func updateSaucer(_ dt: CGFloat) {
         if saucer == nil && wave >= 2 && elapsed - lastSaucer > nextSaucerDelay {
             spawnSaucer()
         }
         guard var enemy = saucer else { return }
         enemy.remaining -= dt
+        enemy.tacticRemaining -= dt
+        let position = enemy.node.position
+        let dx = ship.position.x - position.x
+        let dy = ship.position.y - position.y
+        let distance = max(1, hypot(dx, dy))
+        let unit = CGVector(dx: dx / distance, dy: dy / distance)
+        let lateral = CGVector(dx: -unit.dy * enemy.flankDirection,
+                               dy: unit.dx * enemy.flankDirection)
+
+        // Easy starts with predictable passes, then sometimes switches
+        // direction. Medium/Hard allow flanking and disengagement sooner.
+        if enemy.tacticRemaining <= 0 {
+            let options: [RaiderTactic] = difficulty == .easy && wave < 5
+                ? [.strafe, .strafe, .flank]
+                : [.strafe, .flank, .retreat]
+            let candidates = options.filter { $0 != enemy.tactic }
+            enemy.tactic = candidates.randomElement() ?? .strafe
+            enemy.tacticRemaining = difficulty == .hard
+                ? CGFloat.random(in: 2.2...3.5)
+                : CGFloat.random(in: 3.5...5.2)
+            enemy.flankDirection = Bool.random() ? 1 : -1
+        }
+
+        let desired: CGVector
+        switch enemy.tactic {
+        case .strafe:
+            // Move across the ship's bearing while drifting closer.
+            desired = CGVector(dx: lateral.dx * 0.85 + unit.dx * 0.35,
+                               dy: lateral.dy * 0.85 + unit.dy * 0.35)
+        case .flank:
+            // Orbit, rather than charge; recover distance when too close.
+            let approach: CGFloat = distance > 250 ? 0.50 : -0.25
+            desired = CGVector(dx: lateral.dx + unit.dx * approach,
+                               dy: lateral.dy + unit.dy * approach)
+        case .retreat:
+            // Brief disengagement offers a window to reposition and pursue.
+            desired = CGVector(dx: -unit.dx * 0.95 + lateral.dx * 0.18,
+                               dy: -unit.dy * 0.95 + lateral.dy * 0.18)
+        }
+
+        // During decloaking keep an inward path from the chosen screen edge.
+        // Steering begins afterward so it doesn't disappear offscreen at spawn.
+        if enemy.decloakRemaining <= 0 {
+            steerRaider(&enemy, toward: desired, dt: dt)
+        }
         enemy.node.position.x += enemy.velocity.dx * dt
         enemy.node.position.y += enemy.velocity.dy * dt
-        // Keep evasive movement, but do not clamp top/bottom entries to the
-        // screen edge. Flight direction stays predominantly inward.
-        let wobble = sin(elapsed * 3.4) * 18 * dt
-        let lateral = CGVector(dx: -enemy.velocity.dy, dy: enemy.velocity.dx)
-        let speed = max(1, hypot(lateral.dx, lateral.dy))
-        enemy.node.position.x += lateral.dx / speed * wobble
-        enemy.node.position.y += lateral.dy / speed * wobble
-        if enemy.node.position.x > 30 && enemy.node.position.x < size.width - 30 &&
-           enemy.node.position.y > 30 && enemy.node.position.y < size.height - 30 {
-            let pursuit = CGPoint(x: ship.position.x - enemy.node.position.x,
-                                  y: ship.position.y - enemy.node.position.y)
-            let norm = max(1, hypot(pursuit.x, pursuit.y))
-            enemy.node.position.x += pursuit.x / norm * 9 * dt
-            enemy.node.position.y += pursuit.y / norm * 9 * dt
-        }
+        // A gentle maneuver tilt makes the tactic legible, without constant
+        // spinning or altering the sprite's orientation transform in saves.
+        let tilt = atan2(enemy.velocity.dy, enemy.velocity.dx)
+        enemy.node.zRotation = tilt
         if enemy.decloakRemaining > 0 {
             enemy.decloakRemaining = max(0, enemy.decloakRemaining - dt)
         } else {
@@ -2503,9 +2531,12 @@ final class DriftScene: SKScene {
                 ArcadeAudio.shared.play(.saucer)
             }
         }
+
+        // Keep the original encounter finite, but allow a full retreat pass
+        // through the outer buffer before despawning.
         if enemy.remaining <= 0 ||
-           enemy.node.position.x < -75 || enemy.node.position.x > size.width + 75 ||
-           enemy.node.position.y < -75 || enemy.node.position.y > size.height + 75 {
+           enemy.node.position.x < -125 || enemy.node.position.x > size.width + 125 ||
+           enemy.node.position.y < -125 || enemy.node.position.y > size.height + 125 {
             enemy.node.removeFromParent()
             saucer = nil
             lastSaucer = elapsed
@@ -2547,8 +2578,12 @@ final class DriftScene: SKScene {
         ]))
         saucer = Saucer(node: node,
                         velocity: route.velocity,
-                        remaining: route.lifetime,
-                        decloakRemaining: 1.10)
+                        remaining: min(route.lifetime, 19),
+                        decloakRemaining: 1.10,
+                        tactic: .strafe,
+                        tacticRemaining: CGFloat.random(in: 2.8...4.2),
+                        flankDirection: Bool.random() ? 1 : -1,
+                        cruiseSpeed: speed)
         lastSaucerShot = elapsed
     }
 
@@ -2770,7 +2805,11 @@ final class DriftScene: SKScene {
             secondsUntilSatellite: Double(max(0, nextSatelliteAt - elapsed)),
             secondsUntilStation: Double(max(0, nextStationAt - elapsed)),
             stationDamageCount: stationDamage,
-            saucerDecloakRemaining: saucer.map { Double($0.decloakRemaining) }
+            saucerDecloakRemaining: saucer.map { Double($0.decloakRemaining) },
+            raiderTactic: saucer.map { $0.tactic.rawValue },
+            raiderTacticRemaining: saucer.map { Double($0.tacticRemaining) },
+            raiderFlankDirection: saucer.map { Double($0.flankDirection) },
+            raiderCruiseSpeed: saucer.map { Double($0.cruiseSpeed) }
         )
     }
 
@@ -2887,7 +2926,11 @@ final class DriftScene: SKScene {
             addChild(node)
             saucer = Saucer(node: node, velocity: vector(saved.velocity),
                             remaining: CGFloat(saved.remaining),
-                            decloakRemaining: cloak)
+                            decloakRemaining: cloak,
+                            tactic: RaiderTactic(rawValue: snapshot.raiderTactic ?? "") ?? .strafe,
+                            tacticRemaining: max(0, CGFloat(snapshot.raiderTacticRemaining ?? 3.5)),
+                            flankDirection: (snapshot.raiderFlankDirection ?? 1) < 0 ? -1 : 1,
+                            cruiseSpeed: max(80, CGFloat(snapshot.raiderCruiseSpeed ?? 110)))
         }
         if let saved = snapshot.satellite {
             let node = ArcadeEffects.satellite(modern: modern)
