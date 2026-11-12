@@ -180,11 +180,17 @@ private struct GameWindow: View {
                         Text("VECTOR DRIFT")
                             .font(.system(size: 19, weight: .black, design: .monospaced))
                             .foregroundStyle(.white)
-                        Text("ARCADE  /  MACOS")
+                        Text("ARCADE  /  MACOS   •   ISS TEST BUILD 2026.11.12b")
                             .font(.system(size: 9, weight: .semibold, design: .monospaced))
                             .foregroundStyle(.cyan.opacity(0.7))
                     }
                     Spacer()
+                    Button("ISS Test") {
+                        if mode != Look.flight3D.rawValue {
+                            game.spawnTestStation()
+                        }
+                    }
+                    .help("Bring an ISS-style station into view to test bullet impacts")
                     Button("Custom Game") { showPreferences = true }
                     Button("Save Game") {
                         if mode == Look.flight3D.rawValue {
@@ -2197,6 +2203,31 @@ final class DriftScene: SKScene {
         )
     }
 
+    /// Manual runtime verification: place the current ISS asset near the ship,
+    /// so testing cannot depend on waiting for a random flyby.
+    func spawnTestStation() {
+        guard ready else { return }
+        station?.node.removeFromParent()
+        station = nil
+        stationDamage = 0
+        let node = ArcadeEffects.station(modern: modern)
+        node.position = CGPoint(x: size.width * 0.60, y: size.height * 0.55)
+        node.setScale(1.55)
+        addChild(node)
+        station = OrbitalTraffic(node: node,
+                                 velocity: .zero,
+                                 remaining: 50)
+        let note = SKLabelNode(fontNamed: "Menlo-Bold")
+        note.text = "ISS TEST  •  SHOOT SOLAR ARRAYS"
+        note.fontSize = 13
+        note.fontColor = .systemCyan
+        note.position = CGPoint(x: node.position.x, y: node.position.y + 124)
+        note.zPosition = 16
+        addChild(note)
+        note.run(.sequence([.wait(forDuration: 3), .fadeOut(withDuration: 0.5),
+                            .removeFromParent()]))
+    }
+
     private func spawnStation() {
         let fromLeft = Bool.random()
         let direction: CGFloat = fromLeft ? 1 : -1
@@ -2221,7 +2252,7 @@ final class DriftScene: SKScene {
     /// This catches fast bullets crossing the station between rendered frames.
     private func stationImpact(from start: CGPoint, to end: CGPoint,
                                station target: OrbitalTraffic) -> CGPoint? {
-        // Do not treat edge-wrap teleports as real bullet trajectories.
+        // Ignore only true edge-wrap jumps; ordinary fast bullets are tested.
         guard abs(end.x - start.x) < size.width * 0.75,
               abs(end.y - start.y) < size.height * 0.75 else { return nil }
         let a = target.node.convert(start, from: self)
