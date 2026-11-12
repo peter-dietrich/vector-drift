@@ -181,10 +181,10 @@ private struct GameWindow: View {
                             Text("VECTOR DRIFT")
                                 .font(.system(size: 19, weight: .black, design: .monospaced))
                                 .foregroundStyle(.white)
-                            Text("v2026.11.12c")
+                            Text("v2026.11.12d")
                                 .font(.system(size: 10, weight: .medium, design: .monospaced))
                                 .foregroundStyle(.gray)
-                                .help("Source build identifier: v2026.11.12c")
+                                .help("Source build identifier: v2026.11.12d")
                         }
                         Text("ARCADE  /  MACOS   •   ISS TEST BUILD 2026.11.12b")
                             .font(.system(size: 9, weight: .semibold, design: .monospaced))
@@ -2218,7 +2218,7 @@ final class DriftScene: SKScene {
         stationDamage = 0
         let node = ArcadeEffects.station(modern: modern)
         node.position = CGPoint(x: size.width * 0.60, y: size.height * 0.55)
-        node.setScale(1.55)
+        node.setScale(1.24)
         addChild(node)
         station = OrbitalTraffic(node: node,
                                  velocity: .zero,
@@ -2243,7 +2243,7 @@ final class DriftScene: SKScene {
             x: fromLeft ? -270 : size.width + 270,
             y: CGFloat.random(in: size.height * 0.24...size.height * 0.73)
         )
-        node.setScale(CGFloat.random(in: 1.4...1.6))
+        node.setScale(CGFloat.random(in: 1.12...1.28))
         addChild(node)
         let speed = CGFloat.random(in: 48...70)
         station = OrbitalTraffic(
@@ -2320,8 +2320,14 @@ final class DriftScene: SKScene {
         ]), .removeFromParent()]))
         ArcadeAudio.shared.playRockBreak(level: 1)
         // Detach an entire, visible solar-array assembly on each early hit.
-        for index in previous..<min(stationDamage, 4) {
-            releaseStationSection(named: "stationArray\(index)", from: target)
+        // Only four detachable arrays exist. Clamp both range endpoints:
+        // Swift traps when the lower bound exceeds the upper bound (hit 5+).
+        let detachedBefore = min(max(previous, 0), 4)
+        let detachedAfter = min(max(stationDamage, 0), 4)
+        if detachedBefore < detachedAfter {
+            for index in detachedBefore..<detachedAfter {
+                releaseStationSection(named: "stationArray\(index)", from: target)
+            }
         }
         if stationDamage > previous {
             let scar = SKShapeNode(circleOfRadius: CGFloat.random(in: 3...7))
@@ -2816,7 +2822,7 @@ final class DriftScene: SKScene {
         }
         if let saved = snapshot.station {
             let node = ArcadeEffects.station(modern: modern, damage: stationDamage)
-            node.setScale(1.5)
+            node.setScale(1.2)
             node.position = point(saved.position)
             addChild(node)
             station = OrbitalTraffic(node: node,
