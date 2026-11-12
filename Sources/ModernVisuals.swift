@@ -302,6 +302,49 @@ enum ModernVisuals {
         }
     }
 
+    /// Compact impact reticle, readable even when a target is tiny.
+    static func hitMarker(in layer: SKNode, at point: CGPoint,
+                          radius: CGFloat, color: SKColor) {
+        let ring = SKShapeNode(circleOfRadius: max(7, radius))
+        ring.position = point
+        ring.strokeColor = color
+        ring.fillColor = .clear
+        ring.lineWidth = 2
+        ring.glowWidth = 9
+        ring.zPosition = 18
+        layer.addChild(ring)
+        ring.run(.sequence([.group([
+            .scale(to: 1.65, duration: 0.22),
+            .fadeOut(withDuration: 0.22)
+        ]), .removeFromParent()]))
+    }
+
+    /// A few recognizable hull shards persist longer than the tiny sparks.
+    /// SpriteKit actions self-remove; no unbounded per-frame particle emitters.
+    static func wreckage(in layer: SKNode, at point: CGPoint, size: CGFloat,
+                         color: SKColor, pieces: Int) {
+        for _ in 0..<max(0, min(12, pieces)) {
+            let w = CGFloat.random(in: 0.22...0.55) * size
+            let h = CGFloat.random(in: 0.08...0.20) * size
+            let fragment = SKShapeNode(rectOf: CGSize(width: w, height: h))
+            fragment.position = point
+            fragment.fillColor = color.withAlphaComponent(0.4)
+            fragment.strokeColor = color
+            fragment.lineWidth = 1.1
+            fragment.zPosition = 13
+            layer.addChild(fragment)
+            let angle = CGFloat.random(in: 0...(2 * .pi))
+            let dist = CGFloat.random(in: 35...105)
+            let duration = Double.random(in: 0.9...1.8)
+            fragment.run(.sequence([.group([
+                .moveBy(x: cos(angle) * dist, y: sin(angle) * dist,
+                        duration: duration),
+                .rotate(byAngle: CGFloat.random(in: -4...4), duration: duration),
+                .fadeOut(withDuration: duration)
+            ]), .removeFromParent()]))
+        }
+    }
+
     static func shockRing(at point: CGPoint) -> SKShapeNode {
         let ring = SKShapeNode(circleOfRadius: 12)
         ring.position = point
