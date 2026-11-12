@@ -210,13 +210,13 @@ enum ArcadeEffects {
         let copper = SKColor(calibratedRed: 0.76, green: 0.47, blue: 0.23, alpha: 1)
 
         func beam(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat,
-                  parent: SKNode = root) {
+                  parent: SKNode? = nil) {
             let shape = SKShapeNode(rectOf: CGSize(width: w, height: h))
             shape.position = CGPoint(x: x, y: y)
             shape.strokeColor = metal
             shape.fillColor = shadow
             shape.lineWidth = 1
-            parent.addChild(shape)
+            (parent ?? root).addChild(shape)
         }
         // The recognizable 250-point main ISS truss, with repeating bracing.
         beam(0, 0, 245, 6)
