@@ -181,10 +181,10 @@ private struct GameWindow: View {
                             Text("VECTOR DRIFT")
                                 .font(.system(size: 19, weight: .black, design: .monospaced))
                                 .foregroundStyle(.white)
-                            Text("v2026.11.12f")
+                            Text("v2026.11.12g")
                                 .font(.system(size: 10, weight: .medium, design: .monospaced))
                                 .foregroundStyle(.gray)
-                                .help("Source build identifier: v2026.11.12f")
+                                .help("Source build identifier: v2026.11.12g")
                         }
                         Text("ARCADE  /  MACOS   •   ISS TEST BUILD 2026.11.12b")
                             .font(.system(size: 9, weight: .semibold, design: .monospaced))
@@ -565,6 +565,8 @@ final class DriftScene: SKScene {
     // A guaranteed opaque floor for the entire scene, independent of
     // SwiftUI view timing, scene clear colors or procedural textures.
     private let spaceBackdrop = SKSpriteNode(color: .black, size: .zero)
+    private let feedbackCamera = SKCameraNode()
+    private var lastImpactShake: CGFloat = -2
     private var backgroundLayer: VectorNebulaField?
     // Cold launch needs several live SpriteKit frames before generating the
     // initial GPU textures. Gameplay regeneration already occurs after this.
@@ -635,6 +637,9 @@ final class DriftScene: SKScene {
         }
         ready = true
         backgroundColor = .black
+        feedbackCamera.position = CGPoint(x: size.width / 2, y: size.height / 2)
+        addChild(feedbackCamera)
+        camera = feedbackCamera
         spaceBackdrop.zPosition = -1000
         spaceBackdrop.color = .black
         spaceBackdrop.size = size
@@ -751,6 +756,8 @@ final class DriftScene: SKScene {
     }
 
     override func didChangeSize(_ oldSize: CGSize) {
+        feedbackCamera.removeAction(forKey: "impactShake")
+        feedbackCamera.position = CGPoint(x: size.width / 2, y: size.height / 2)
         spaceBackdrop.size = size
         spaceBackdrop.position = CGPoint(x: size.width / 2, y: size.height / 2)
         backgroundLayer?.resize(to: size)
@@ -809,6 +816,9 @@ final class DriftScene: SKScene {
     }
 
     func restart() {
+        feedbackCamera.removeAction(forKey: "impactShake")
+        feedbackCamera.position = CGPoint(x: size.width / 2, y: size.height / 2)
+        lastImpactShake = -2
         ArcadeAudio.shared.stopThrust()
         guard ready else { return }
         boulders.forEach { $0.node.removeFromParent() }
@@ -1180,6 +1190,27 @@ final class DriftScene: SKScene {
         }
     }
 
+    /// A restrained, bounded camera impulse reserved for significant events.
+    /// Re-entrant triggers are rate-limited to avoid jitter during beam fire.
+    private func shakeForImpact(_ strength: CGFloat) {
+        guard modern, elapsed - lastImpactShake > 0.26 else { return }
+        lastImpactShake = elapsed
+        let origin = CGPoint(x: size.width / 2, y: size.height / 2)
+        let amount = min(max(strength, 1), 4.5)
+        feedbackCamera.removeAction(forKey: "impactShake")
+        feedbackCamera.position = origin
+        let offsets = [CGVector(dx: amount, dy: amount * 0.3),
+                       CGVector(dx: -amount * 0.65, dy: -amount * 0.6),
+                       CGVector(dx: amount * 0.3, dy: amount * 0.25)]
+        let actions = offsets.map { delta in
+            SKAction.move(to: CGPoint(x: origin.x + delta.dx,
+                                      y: origin.y + delta.dy), duration: 0.035)
+        }
+        feedbackCamera.run(.sequence(actions + [
+            .move(to: origin, duration: 0.055)
+        ]), withKey: "impactShake")
+    }
+
     /// One death path handles rock collisions and nuclear splash damage.
     /// The nuke deliberately bypasses shield and respawn protection, but
     /// never subtracts multiple lives during the same death animation.
@@ -1189,6 +1220,7 @@ final class DriftScene: SKScene {
         ArcadeAudio.shared.stopThrust()
         if shieldActive { startShieldRecharge() }
         ArcadeAudio.shared.play(.ship)
+        shakeForImpact(4.5)
         shipImpact()
         updateHud()
         if lives <= 0 {
@@ -1401,9 +1433,14 @@ final class DriftScene: SKScene {
         let position = rock.node.position
         rock.node.removeFromParent()
         ArcadeAudio.shared.playRockBreak(level: rock.level)
+        if rock.level >= 3 { shakeForImpact(rock.level >= 5 ? 3.2 : 1.8) }
         if modern {
             ModernVisuals.fractureBurst(in: self, at: position,
                                         radius: rock.radius, intensity: rock.level)
+            ModernVisuals.wreckage(in: self, at: position,
+                                   size: max(8, rock.radius * 0.75),
+                                   color: ModernVisuals.ice,
+                                   pieces: min(6, 2 + rock.level))
         }
         if byPlayer {
             award(rock.level == 5 ? 90 :
@@ -1449,6 +1486,9 @@ final class DriftScene: SKScene {
             if modern {
                 ModernVisuals.damageFlare(in: self, at: rock.node.position,
                                           radius: rock.radius, stage: damageStage)
+                ModernVisuals.hitMarker(in: self, at: rock.node.position,
+                                        radius: max(8, rock.radius * 0.48),
+                                        color: damageStage > 1 ? .systemRed : .systemOrange)
             }
             return // No change in radius until final shot or countdown.
         }
@@ -2339,6 +2379,7 @@ final class DriftScene: SKScene {
             .fadeOut(withDuration: 0.34)
         ]), .removeFromParent()]))
         ArcadeAudio.shared.playRockBreak(level: 1)
+        shakeForImpact(force > 1 ? 2.2 : 1.0)
         // Detach an entire, visible solar-array assembly on each early hit.
         // Only four detachable arrays exist. Clamp both range endpoints:
         // Swift traps when the lower bound exceeds the upper bound (hit 5+).
@@ -2399,6 +2440,7 @@ final class DriftScene: SKScene {
         target.node.removeFromParent()
         satellite = nil
         award(350)
+        shakeForImpact(2.7)
         ArcadeAudio.shared.playRockBreak(level: 4)
         if modern {
             ModernVisuals.burst(in: self, at: point, color: ModernVisuals.ice, count: 29)
@@ -2576,6 +2618,7 @@ final class DriftScene: SKScene {
         lastSaucer = elapsed
         nextSaucerDelay = CGFloat.random(in: difficulty.saucerDelay)
         award(300)
+        shakeForImpact(4.2)
         ArcadeAudio.shared.play(.saucer)
         ArcadeAudio.shared.playRockBreak(level: 5)
         let primary = modern ? SKColor.systemRed : .white
@@ -2584,6 +2627,10 @@ final class DriftScene: SKScene {
         if modern {
             ModernVisuals.burst(in: self, at: position, color: .systemOrange, count: 24)
             ModernVisuals.floatScore("RAIDER +300", in: self, at: position)
+            ModernVisuals.wreckage(in: self, at: position, size: 24,
+                                   color: .systemRed, pieces: 9)
+            ModernVisuals.hitMarker(in: self, at: position, radius: 22,
+                                    color: .systemOrange)
         }
         for (index, radius) in [CGFloat(13), CGFloat(22)].enumerated() {
             let shock = SKShapeNode(circleOfRadius: radius)
