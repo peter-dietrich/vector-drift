@@ -181,10 +181,10 @@ private struct GameWindow: View {
                             Text("VECTOR DRIFT")
                                 .font(.system(size: 19, weight: .black, design: .monospaced))
                                 .foregroundStyle(.white)
-                            Text("v2026.11.12d")
+                            Text("v2026.11.12e")
                                 .font(.system(size: 10, weight: .medium, design: .monospaced))
                                 .foregroundStyle(.gray)
-                                .help("Source build identifier: v2026.11.12d")
+                                .help("Source build identifier: v2026.11.12e")
                         }
                         Text("ARCADE  /  MACOS   •   ISS TEST BUILD 2026.11.12b")
                             .font(.system(size: 9, weight: .semibold, design: .monospaced))
@@ -2218,7 +2218,7 @@ final class DriftScene: SKScene {
         stationDamage = 0
         let node = ArcadeEffects.station(modern: modern)
         node.position = CGPoint(x: size.width * 0.60, y: size.height * 0.55)
-        node.setScale(1.24)
+        node.setScale(1.116)
         addChild(node)
         station = OrbitalTraffic(node: node,
                                  velocity: .zero,
@@ -2243,7 +2243,7 @@ final class DriftScene: SKScene {
             x: fromLeft ? -270 : size.width + 270,
             y: CGFloat.random(in: size.height * 0.24...size.height * 0.73)
         )
-        node.setScale(CGFloat.random(in: 1.12...1.28))
+        node.setScale(CGFloat.random(in: 1.008...1.152))
         addChild(node)
         let speed = CGFloat.random(in: 48...70)
         station = OrbitalTraffic(
@@ -2822,7 +2822,7 @@ final class DriftScene: SKScene {
         }
         if let saved = snapshot.station {
             let node = ArcadeEffects.station(modern: modern, damage: stationDamage)
-            node.setScale(1.2)
+            node.setScale(1.08)
             node.position = point(saved.position)
             addChild(node)
             station = OrbitalTraffic(node: node,
