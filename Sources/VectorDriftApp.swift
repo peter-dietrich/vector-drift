@@ -181,10 +181,10 @@ private struct GameWindow: View {
                             Text("VECTOR DRIFT")
                                 .font(.system(size: 19, weight: .black, design: .monospaced))
                                 .foregroundStyle(.white)
-                            Text("v2026.11.12e")
+                            Text("v2026.11.12f")
                                 .font(.system(size: 10, weight: .medium, design: .monospaced))
                                 .foregroundStyle(.gray)
-                                .help("Source build identifier: v2026.11.12e")
+                                .help("Source build identifier: v2026.11.12f")
                         }
                         Text("ARCADE  /  MACOS   •   ISS TEST BUILD 2026.11.12b")
                             .font(.system(size: 9, weight: .semibold, design: .monospaced))
@@ -2167,7 +2167,9 @@ final class DriftScene: SKScene {
             object.node.zRotation += dt * 0.16
             if object.remaining <= 0 ||
                 object.node.position.x < -110 ||
-                object.node.position.x > size.width + 110 {
+                object.node.position.x > size.width + 110 ||
+                object.node.position.y < -110 ||
+                object.node.position.y > size.height + 110 {
                 object.node.removeFromParent()
                 satellite = nil
             } else {
@@ -2181,7 +2183,9 @@ final class DriftScene: SKScene {
             object.node.zRotation += dt * 0.018
             if object.remaining <= 0 ||
                 object.node.position.x < -280 ||
-                object.node.position.x > size.width + 280 {
+                object.node.position.x > size.width + 280 ||
+                object.node.position.y < -280 ||
+                object.node.position.y > size.height + 280 {
                 object.node.removeFromParent()
                 station = nil
             } else {
@@ -2190,23 +2194,46 @@ final class DriftScene: SKScene {
         }
     }
 
+    /// Spawn beyond one of all four sides, aiming across the playfield.
+    /// The velocity points inward, so top/bottom entries remain fair and do
+    /// not disappear immediately. Independently randomize destination/angle.
+    private func orbitalRoute(speed: CGFloat, margin: CGFloat) ->
+        (position: CGPoint, velocity: CGVector, lifetime: CGFloat) {
+        let edge = Int.random(in: 0..<4)
+        let width = max(size.width, 300)
+        let height = max(size.height, 240)
+        let start: CGPoint
+        switch edge {
+        case 0:
+            start = CGPoint(x: -margin, y: CGFloat.random(in: height * 0.12...height * 0.88))
+        case 1:
+            start = CGPoint(x: width + margin, y: CGFloat.random(in: height * 0.12...height * 0.88))
+        case 2:
+            start = CGPoint(x: CGFloat.random(in: width * 0.12...width * 0.88), y: -margin)
+        default:
+            start = CGPoint(x: CGFloat.random(in: width * 0.12...width * 0.88), y: height + margin)
+        }
+        // Each entry has a different diagonal, not simply a four-way vector.
+        let destination = CGPoint(x: CGFloat.random(in: width * 0.22...width * 0.78),
+                                  y: CGFloat.random(in: height * 0.22...height * 0.78))
+        let dx = destination.x - start.x
+        let dy = destination.y - start.y
+        let distance = max(1, hypot(dx, dy))
+        let velocity = CGVector(dx: dx / distance * speed,
+                                dy: dy / distance * speed)
+        let lifetime = (hypot(width, height) * 2 + margin * 3) / max(speed, 1)
+        return (start, velocity, lifetime)
+    }
+
     private func spawnSatellite() {
-        let fromLeft = Bool.random()
-        let direction: CGFloat = fromLeft ? 1 : -1
         let node = ArcadeEffects.satellite(modern: modern)
-        node.position = CGPoint(
-            x: fromLeft ? -85 : size.width + 85,
-            y: CGFloat.random(in: size.height * 0.20...size.height * 0.78)
-        )
-        node.zRotation = CGFloat.random(in: -0.22...0.22)
-        addChild(node)
         let speed = CGFloat.random(in: 105...145)
-        let travelTime = (size.width + 220) / speed + 1.0
-        satellite = OrbitalTraffic(
-            node: node,
-            velocity: CGVector(dx: direction * speed, dy: CGFloat.random(in: -8...8)),
-            remaining: travelTime
-        )
+        let route = orbitalRoute(speed: speed, margin: 85)
+        node.position = route.position
+        node.zRotation = atan2(route.velocity.dy, route.velocity.dx)
+        addChild(node)
+        satellite = OrbitalTraffic(node: node, velocity: route.velocity,
+                                   remaining: route.lifetime)
     }
 
     /// Manual runtime verification: place the current ISS asset near the ship,
@@ -2235,24 +2262,17 @@ final class DriftScene: SKScene {
     }
 
     private func spawnStation() {
-        let fromLeft = Bool.random()
-        let direction: CGFloat = fromLeft ? 1 : -1
         stationDamage = 0
         let node = ArcadeEffects.station(modern: modern)
-        node.position = CGPoint(
-            x: fromLeft ? -270 : size.width + 270,
-            y: CGFloat.random(in: size.height * 0.24...size.height * 0.73)
-        )
         node.setScale(CGFloat.random(in: 1.008...1.152))
-        addChild(node)
         let speed = CGFloat.random(in: 48...70)
-        station = OrbitalTraffic(
-            node: node,
-            velocity: CGVector(dx: direction * speed, dy: CGFloat.random(in: -5...5)),
-            remaining: (size.width + 560) / speed + 1.5
-        )
+        let route = orbitalRoute(speed: speed, margin: 270)
+        node.position = route.position
+        node.zRotation = CGFloat.random(in: -0.18...0.18)
+        addChild(node)
+        station = OrbitalTraffic(node: node, velocity: route.velocity,
+                                 remaining: route.lifetime)
     }
-
 
     /// Continuous segment-vs-rotated-hull intersection in station coordinates.
     /// This catches fast bullets crossing the station between rendered frames.
@@ -2414,10 +2434,22 @@ final class DriftScene: SKScene {
         guard var enemy = saucer else { return }
         enemy.remaining -= dt
         enemy.node.position.x += enemy.velocity.dx * dt
-        let lateral = sin(elapsed * 3.4) * 31 * dt
-        let track = max(-18 * dt, min(18 * dt, (ship.position.y - enemy.node.position.y) * 0.10 * dt))
-        enemy.node.position.y = max(35, min(size.height - 35,
-                                              enemy.node.position.y + lateral + track))
+        enemy.node.position.y += enemy.velocity.dy * dt
+        // Keep evasive movement, but do not clamp top/bottom entries to the
+        // screen edge. Flight direction stays predominantly inward.
+        let wobble = sin(elapsed * 3.4) * 18 * dt
+        let lateral = CGVector(dx: -enemy.velocity.dy, dy: enemy.velocity.dx)
+        let speed = max(1, hypot(lateral.dx, lateral.dy))
+        enemy.node.position.x += lateral.dx / speed * wobble
+        enemy.node.position.y += lateral.dy / speed * wobble
+        if enemy.node.position.x > 30 && enemy.node.position.x < size.width - 30 &&
+           enemy.node.position.y > 30 && enemy.node.position.y < size.height - 30 {
+            let pursuit = CGPoint(x: ship.position.x - enemy.node.position.x,
+                                  y: ship.position.y - enemy.node.position.y)
+            let norm = max(1, hypot(pursuit.x, pursuit.y))
+            enemy.node.position.x += pursuit.x / norm * 9 * dt
+            enemy.node.position.y += pursuit.y / norm * 9 * dt
+        }
         if enemy.decloakRemaining > 0 {
             enemy.decloakRemaining = max(0, enemy.decloakRemaining - dt)
         } else {
@@ -2429,8 +2461,9 @@ final class DriftScene: SKScene {
                 ArcadeAudio.shared.play(.saucer)
             }
         }
-        if enemy.remaining <= 0 || enemy.node.position.x < -75 ||
-           enemy.node.position.x > size.width + 75 {
+        if enemy.remaining <= 0 ||
+           enemy.node.position.x < -75 || enemy.node.position.x > size.width + 75 ||
+           enemy.node.position.y < -75 || enemy.node.position.y > size.height + 75 {
             enemy.node.removeFromParent()
             saucer = nil
             lastSaucer = elapsed
@@ -2441,14 +2474,12 @@ final class DriftScene: SKScene {
     }
 
     private func spawnSaucer() {
-        let fromLeft = Bool.random()
-        let direction: CGFloat = fromLeft ? 1 : -1
         let node = ArcadeEffects.saucer(modern: modern)
-        node.position = CGPoint(
-            x: fromLeft ? -48 : size.width + 48,
-            y: CGFloat.random(in: size.height * 0.22...size.height * 0.79)
-        )
-        if !fromLeft { node.xScale = -1 }
+        let speed = CGFloat.random(in: 92...132) * difficulty.speedMultiplier
+        let route = orbitalRoute(speed: speed, margin: 48)
+        node.position = route.position
+        node.zRotation = atan2(route.velocity.dy, route.velocity.dx)
+        if route.velocity.dx < 0 { node.xScale = -1 }
         node.alpha = 0.05
         addChild(node)
         // Non-collidable until the shimmer resolves; the enemy appears as
@@ -2472,10 +2503,9 @@ final class DriftScene: SKScene {
                     .fadeOut(withDuration: 1.10)]),
             .removeFromParent()
         ]))
-        let speed = CGFloat.random(in: 92...132) * difficulty.speedMultiplier
         saucer = Saucer(node: node,
-                        velocity: CGVector(dx: direction * speed, dy: 0),
-                        remaining: (size.width + 160) / speed + 1.5,
+                        velocity: route.velocity,
+                        remaining: route.lifetime,
                         decloakRemaining: 1.10)
         lastSaucerShot = elapsed
     }
