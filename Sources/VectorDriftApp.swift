@@ -184,10 +184,10 @@ private struct GameWindow: View {
                             Text("VECTOR DRIFT")
                                 .font(.system(size: 19, weight: .black, design: .monospaced))
                                 .foregroundStyle(.white)
-                            Text("v2026.11.13a")
+                            Text("v2026.11.13b")
                                 .font(.system(size: 10, weight: .medium, design: .monospaced))
                                 .foregroundStyle(.gray)
-                                .help("Source build identifier: v2026.11.13a")
+                                .help("Source build identifier: v2026.11.13b")
                         }
                         Text("ARCADE  /  MACOS")
                             .font(.system(size: 9, weight: .semibold, design: .monospaced))
@@ -212,6 +212,13 @@ private struct GameWindow: View {
                     Toggle("Sound", isOn: $soundEnabled)
                         .toggleStyle(.checkbox)
                     Button("Scores") { showScores = true }
+                    if game.hasUnclaimedHighScore {
+                        Button("Claim High Score") {
+                            pendingRecordScore=game.existingHighScore
+                            recordInitials=""
+                            showRecordInitials=true
+                        }
+                    }
                     Button("New Game") {
                         if mode == Look.flight3D.rawValue { flight.restart() }
                         else { game.restart() }
@@ -294,6 +301,11 @@ private struct GameWindow: View {
             flight.difficulty = difficulty
             flight.soundEnabled = soundEnabled
             ArcadeAudio.shared.enabled = soundEnabled
+            if game.hasUnclaimedHighScore {
+                pendingRecordScore=game.existingHighScore
+                recordInitials=""
+                DispatchQueue.main.async { showRecordInitials=true }
+            }
             game.onNewHighScore = { score in
                 DispatchQueue.main.async {
                     pendingRecordScore=score
@@ -380,7 +392,8 @@ private struct GameWindow: View {
                     .foregroundStyle(.cyan)
                 Text(String(format:"%06d",pendingRecordScore))
                     .font(.system(size:35,weight:.bold,design:.monospaced))
-                Text("ENTER YOUR INITIALS")
+                Text(game.hasUnclaimedHighScore && pendingRecordScore == game.existingHighScore ?
+                    "CLAIM EXISTING RECORD — ENTER INITIALS" : "ENTER YOUR INITIALS")
                     .font(.system(size:12,weight:.bold,design:.monospaced))
                     .foregroundStyle(.secondary)
                 TextField("ABC",text:$recordInitials)
@@ -628,10 +641,13 @@ final class DriftScene: SKScene {
     private var high = UserDefaults.standard.integer(forKey: "highScore")
     private var highInitials = UserDefaults.standard.string(forKey:"vectorDriftHighScoreInitials.v1") ?? "---"
     private var recordToBeat = UserDefaults.standard.integer(forKey:"highScore")
+    var hasUnclaimedHighScore: Bool { high > 0 && (highInitials == "---" || highInitials.isEmpty) }
+    var existingHighScore: Int { high }
     var onNewHighScore: ((Int) -> Void)?
     func setHighScoreInitials(_ text: String) {
         let name=String(text.uppercased().filter { $0.isLetter }.prefix(3))
-        guard !name.isEmpty && over && score > recordToBeat else { return }
+        let newRunRecord = over && score > recordToBeat
+        guard !name.isEmpty && (newRunRecord || hasUnclaimedHighScore) else { return }
         highInitials=name
         UserDefaults.standard.set(name,forKey:"vectorDriftHighScoreInitials.v1")
         recordToBeat=high
