@@ -162,6 +162,9 @@ private struct GameWindow: View {
     @State private var showScores = false
     @State private var showPreferences = false
     @State private var showSavedGames = false
+    @State private var showRecordInitials = false
+    @State private var recordInitials = ""
+    @State private var pendingRecordScore = 0
     @State private var activePresetID = ""
     @State private var savedGames: [GameSaveSlot] = []
     @State private var saved3DGames: [Flight3DSaveSlot] = []
@@ -181,10 +184,10 @@ private struct GameWindow: View {
                             Text("VECTOR DRIFT")
                                 .font(.system(size: 19, weight: .black, design: .monospaced))
                                 .foregroundStyle(.white)
-                            Text("v2026.11.12h")
+                            Text("v2026.11.13a")
                                 .font(.system(size: 10, weight: .medium, design: .monospaced))
                                 .foregroundStyle(.gray)
-                                .help("Source build identifier: v2026.11.12h")
+                                .help("Source build identifier: v2026.11.13a")
                         }
                         Text("ARCADE  /  MACOS")
                             .font(.system(size: 9, weight: .semibold, design: .monospaced))
@@ -291,6 +294,13 @@ private struct GameWindow: View {
             flight.difficulty = difficulty
             flight.soundEnabled = soundEnabled
             ArcadeAudio.shared.enabled = soundEnabled
+            game.onNewHighScore = { score in
+                DispatchQueue.main.async {
+                    pendingRecordScore=score
+                    recordInitials=""
+                    showRecordInitials=true
+                }
+            }
         }
         .onChange(of: soundEnabled) {
             ArcadeAudio.shared.enabled = $0
@@ -362,6 +372,35 @@ private struct GameWindow: View {
                 Button("Close") { showSavedGames = false }
             }
             .padding(24).frame(width: 550, height: 450)
+        }
+        .sheet(isPresented:$showRecordInitials) {
+            VStack(alignment:.leading,spacing:13) {
+                Text("NEW HIGH SCORE")
+                    .font(.system(size:23,weight:.black,design:.monospaced))
+                    .foregroundStyle(.cyan)
+                Text(String(format:"%06d",pendingRecordScore))
+                    .font(.system(size:35,weight:.bold,design:.monospaced))
+                Text("ENTER YOUR INITIALS")
+                    .font(.system(size:12,weight:.bold,design:.monospaced))
+                    .foregroundStyle(.secondary)
+                TextField("ABC",text:$recordInitials)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size:24,weight:.heavy,design:.monospaced))
+                    .onChange(of:recordInitials) { value in
+                        recordInitials=String(value.uppercased().filter { $0.isLetter }.prefix(3))
+                    }
+                HStack {
+                    Spacer()
+                    Button("Save High Score") {
+                        game.setHighScoreInitials(recordInitials)
+                        showRecordInitials=false
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(recordInitials.isEmpty)
+                }
+            }
+            .padding(26).frame(width:380)
+            .interactiveDismissDisabled()
         }
         .sheet(isPresented: $showScores) {
             VStack(alignment: .leading, spacing: 14) {
@@ -587,6 +626,17 @@ final class DriftScene: SKScene {
     private var velocity = CGVector.zero
     private var score = 0
     private var high = UserDefaults.standard.integer(forKey: "highScore")
+    private var highInitials = UserDefaults.standard.string(forKey:"vectorDriftHighScoreInitials.v1") ?? "---"
+    private var recordToBeat = UserDefaults.standard.integer(forKey:"highScore")
+    var onNewHighScore: ((Int) -> Void)?
+    func setHighScoreInitials(_ text: String) {
+        let name=String(text.uppercased().filter { $0.isLetter }.prefix(3))
+        guard !name.isEmpty && over && score > recordToBeat else { return }
+        highInitials=name
+        UserDefaults.standard.set(name,forKey:"vectorDriftHighScoreInitials.v1")
+        recordToBeat=high
+        updateHud()
+    }
     private var lives = 3
     private var wave = 1
     private var stopped = false
@@ -835,6 +885,7 @@ final class DriftScene: SKScene {
         boulders.removeAll()
         lasers.removeAll()
         held.removeAll()
+        recordToBeat=high
         score = 0; lives = customRules?.startingLives ?? difficulty.startingLives; wave = 1
         elapsed = 0; lastTime = 0; lastFire = -2; lastWarp = -10
         ammo = AmmoReserve()
@@ -1649,7 +1700,7 @@ final class DriftScene: SKScene {
 
     private func updateHud() {
         hud.text = String(format: "%06d", score)
-        leftFootnote.text = String(format: "BEST  %06d", high)
+        leftFootnote.text = String(format: "BEST  %06d  %@", high, highInitials)
         waveValue.text = String(format: "%02d", wave)
         let density = Int((beltDensity(at: elapsed) * 100).rounded())
         beltCaption.text = modern ? "BELT DENSITY" : "FLIGHT PROFILE"
@@ -2694,6 +2745,9 @@ final class DriftScene: SKScene {
         scores.append(score)
         scores.sort(by: >)
         UserDefaults.standard.set(Array(scores.prefix(5)), forKey: key)
+        if score > recordToBeat {
+            onNewHighScore?(score)
+        }
     }
 
     private func moveAtEdge(_ proposed: CGPoint, velocity v: inout CGVector,
@@ -2831,8 +2885,12 @@ final class DriftScene: SKScene {
         lasers.removeAll()
         elapsed = CGFloat(snapshot.elapsed)
         lastTime = 0
+        recordToBeat=high
         score = snapshot.score
         high = max(high, score)
+        if high > UserDefaults.standard.integer(forKey:"highScore") {
+            UserDefaults.standard.set(high,forKey:"highScore")
+        }
         lives = snapshot.lives
         wave = snapshot.wave
         heading = CGFloat(snapshot.heading)
