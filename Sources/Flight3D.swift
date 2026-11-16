@@ -55,6 +55,7 @@ struct Flight3DSaveSlot: Codable, Identifiable {
     var id: String
     var date: Date
     var summary: String
+    var name: String?
     var snapshot: Flight3DSnapshot
 }
 
@@ -69,13 +70,30 @@ enum Flight3DStore {
         (try? savesChecked()) ?? []
     }
 
-    static func saveChecked(_ snapshot: Flight3DSnapshot) throws {
+    static func defaultName(for snapshot: Flight3DSnapshot) -> String {
+        "3D Flight · Wave \(snapshot.wave) · \(snapshot.score) points"
+    }
+
+    static func saveChecked(_ snapshot: Flight3DSnapshot, name: String) throws {
+        let label = String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(60))
+        guard !label.isEmpty else { throw CocoaError(.fileWriteInvalidFileName) }
         let slot = Flight3DSaveSlot(id: UUID().uuidString, date: Date(),
-             summary: "3D Flight · Wave \(snapshot.wave) · \(snapshot.score) points",
+             summary: defaultName(for: snapshot), name: label,
              snapshot: snapshot)
         var list = try savesChecked()
         list.insert(slot, at: 0)
         try ReliableGameSaveStorage.write(Array(list.prefix(12)), for: key)
+    }
+
+    static func rename(id: String, to newName: String) throws {
+        let label = String(newName.trimmingCharacters(in: .whitespacesAndNewlines).prefix(60))
+        guard !label.isEmpty else { throw CocoaError(.fileWriteInvalidFileName) }
+        var slots = try savesChecked()
+        guard let index = slots.firstIndex(where: { $0.id == id }) else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+        slots[index].name = label
+        try ReliableGameSaveStorage.write(slots, for: key)
     }
 
     static func delete(id: String) {
