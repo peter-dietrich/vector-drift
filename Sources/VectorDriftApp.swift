@@ -192,10 +192,17 @@ private struct GameWindow: View {
                             Text("VECTOR DRIFT")
                                 .font(.system(size: 19, weight: .black, design: .monospaced))
                                 .foregroundStyle(.white)
-                            Text("v2026.11.13b")
+                            Text({
+                                let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+                                let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+                                if let version, !version.isEmpty {
+                                    return "v\(version)" + (build.map { " (\($0))" } ?? "")
+                                }
+                                return "development build"
+                            }())
                                 .font(.system(size: 10, weight: .medium, design: .monospaced))
                                 .foregroundStyle(.gray)
-                                .help("Source build identifier: v2026.11.13b")
+                                .help("Version and build from the installed app bundle")
                         }
                         Text("ARCADE  /  MACOS")
                             .font(.system(size: 9, weight: .semibold, design: .monospaced))
