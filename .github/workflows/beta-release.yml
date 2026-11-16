@@ -39,8 +39,19 @@ jobs:
             INFOPLIST_KEY_CFBundleVersion="$BUILD" build
           APP="$RUNNER_TEMP/derived/Build/Products/Release/VectorDrift.app"
           test -d "$APP"
-          test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$APP/Contents/Info.plist")" = "0.14.2"
-          test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' "$APP/Contents/Info.plist")" = "$BUILD"
+          # This project uses GENERATE_INFOPLIST_FILE=YES. Xcode 16.4 does not
+          # automatically add the version keys from the INFOPLIST_KEY_* overrides,
+          # so explicitly write both values BEFORE Developer ID signing.
+          PLIST="$APP/Contents/Info.plist"
+          if ! /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 0.14.2" "$PLIST" 2>/dev/null; then
+            /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string 0.14.2" "$PLIST"
+          fi
+          if ! /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD" "$PLIST" 2>/dev/null; then
+            /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $BUILD" "$PLIST"
+          fi
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$PLIST")" = "0.14.2"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$PLIST")" = "$BUILD"
+          echo "Beta bundle version: $(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$PLIST") ($BUILD)"
 
       - name: Sign with Developer ID and notarize
         env:
