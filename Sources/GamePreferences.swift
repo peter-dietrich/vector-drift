@@ -288,19 +288,53 @@ struct GameSaveSlot: Codable, Identifiable {
     var snapshot: GameSnapshot
 }
 
+/// Durable, atomic save files with read support for legacy UserDefaults slots.
+/// Existing saves are migrated only when a new save is written successfully.
+enum ReliableGameSaveStorage {
+    static func fileURL(for key: String) throws -> URL {
+        let root = try FileManager.default.url(
+            for: .applicationSupportDirectory, in: .userDomainMask,
+            appropriateFor: nil, create: true
+        ).appendingPathComponent("Vector Drift", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        return root.appendingPathComponent(key + ".json")
+    }
+
+    static func read<T: Decodable>(_ key: String, as type: T.Type) throws -> [T] {
+        let url = try fileURL(for: key)
+        if FileManager.default.fileExists(atPath: url.path) {
+            return try JSONDecoder().decode([T].self, from: Data(contentsOf: url))
+        }
+        guard let legacy = UserDefaults.standard.data(forKey: key) else { return [] }
+        return try JSONDecoder().decode([T].self, from: legacy)
+    }
+
+    static func write<T: Codable>(_ values: [T], for key: String) throws {
+        let bytes = try JSONEncoder().encode(values)
+        let url = try fileURL(for: key)
+        try bytes.write(to: url, options: .atomic)
+        // Read back before acknowledging success. Avoid silently losing saves.
+        let verified = try JSONDecoder().decode([T].self, from: Data(contentsOf: url))
+        guard verified.count == values.count else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        // Mirror for older builds. The atomic save file is authoritative.
+        UserDefaults.standard.set(bytes, forKey: key)
+    }
+}
+
 enum GameStore {
     private static let presetsKey = "vectorDrift.customPresets.v1"
     private static let savesKey = "vectorDrift.savedGames.v1"
 
     private static func load<T: Decodable>(_ key: String) -> [T] {
-        guard let data = UserDefaults.standard.data(forKey: key),
-              let objects = try? JSONDecoder().decode([T].self, from: data) else { return [] }
-        return objects
+        (try? ReliableGameSaveStorage.read(key, as: T.self)) ?? []
     }
 
-    private static func persist<T: Encodable>(_ values: [T], at key: String) {
-        guard let bytes = try? JSONEncoder().encode(values) else { return }
-        UserDefaults.standard.set(bytes, forKey: key)
+    private static func persist<T: Codable>(_ values: [T], at key: String) {
+        // Preset UI is legacy; the checked game-save path below surfaces errors.
+        do { try ReliableGameSaveStorage.write(values, for: key) }
+        catch { NSLog("Vector Drift preset persistence failed: %@", error.localizedDescription) }
     }
 
     static func presets() -> [GamePreset] { load(presetsKey) }
@@ -327,20 +361,30 @@ enum GameStore {
 
     static func saves() -> [GameSaveSlot] { load(savesKey) }
 
-    static func saveGame(_ snapshot: GameSnapshot) -> GameSaveSlot {
+    static func savesChecked() throws -> [GameSaveSlot] {
+        try ReliableGameSaveStorage.read(savesKey, as: GameSaveSlot.self)
+    }
+
+    @discardableResult
+    static func saveGameChecked(_ snapshot: GameSnapshot) throws -> GameSaveSlot {
         let slot = GameSaveSlot(
             id: UUID().uuidString,
             name: "Wave \(snapshot.wave) · \(snapshot.customRules == nil ? snapshot.difficulty.capitalized : "Custom") · \(snapshot.score) points",
             savedAt: Date(), snapshot: snapshot
         )
-        var list = saves()
+        var list = try savesChecked()
         list.insert(slot, at: 0)
-        persist(Array(list.prefix(12)), at: savesKey)
+        try ReliableGameSaveStorage.write(Array(list.prefix(12)), for: savesKey)
         return slot
     }
 
     static func deleteGame(id: String) {
-        persist(saves().filter { $0.id != id }, at: savesKey)
+        do {
+            let current = try savesChecked()
+            try ReliableGameSaveStorage.write(current.filter { $0.id != id }, for: savesKey)
+        } catch {
+            NSLog("Vector Drift delete save failed: %@", error.localizedDescription)
+        }
     }
 }
 

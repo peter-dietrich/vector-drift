@@ -60,27 +60,30 @@ struct Flight3DSaveSlot: Codable, Identifiable {
 
 enum Flight3DStore {
     private static let key = "vectorDrift.3dSaves.v1"
-    static func saves() -> [Flight3DSaveSlot] {
-        guard let data = UserDefaults.standard.data(forKey: key),
-              let list = try? JSONDecoder().decode([Flight3DSaveSlot].self, from: data) else {
-            return []
-        }
-        return list
+
+    static func savesChecked() throws -> [Flight3DSaveSlot] {
+        try ReliableGameSaveStorage.read(key, as: Flight3DSaveSlot.self)
     }
-    static func save(_ snapshot: Flight3DSnapshot) {
+
+    static func saves() -> [Flight3DSaveSlot] {
+        (try? savesChecked()) ?? []
+    }
+
+    static func saveChecked(_ snapshot: Flight3DSnapshot) throws {
         let slot = Flight3DSaveSlot(id: UUID().uuidString, date: Date(),
              summary: "3D Flight · Wave \(snapshot.wave) · \(snapshot.score) points",
              snapshot: snapshot)
-        var list = saves()
+        var list = try savesChecked()
         list.insert(slot, at: 0)
-        if let data = try? JSONEncoder().encode(Array(list.prefix(12))) {
-            UserDefaults.standard.set(data, forKey: key)
-        }
+        try ReliableGameSaveStorage.write(Array(list.prefix(12)), for: key)
     }
+
     static func delete(id: String) {
-        let list = saves().filter { $0.id != id }
-        if let data = try? JSONEncoder().encode(list) {
-            UserDefaults.standard.set(data, forKey: key)
+        do {
+            let slots = try savesChecked()
+            try ReliableGameSaveStorage.write(slots.filter { $0.id != id }, for: key)
+        } catch {
+            NSLog("Vector Drift 3D save deletion failed: %@", error.localizedDescription)
         }
     }
 }

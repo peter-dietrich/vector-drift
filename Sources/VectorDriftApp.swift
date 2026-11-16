@@ -162,6 +162,8 @@ private struct GameWindow: View {
     @State private var showScores = false
     @State private var showPreferences = false
     @State private var showSavedGames = false
+    @State private var saveNotice: String?
+    @State private var restoringSavedGame = false
     @State private var showRecordInitials = false
     @State private var recordInitials = ""
     @State private var pendingRecordScore = 0
@@ -196,18 +198,34 @@ private struct GameWindow: View {
                     Spacer()
                     Button("Custom Game") { showPreferences = true }
                     Button("Save Game") {
-                        if mode == Look.flight3D.rawValue {
-                            if let snapshot = flight.makeSnapshot() {
-                                Flight3DStore.save(snapshot)
+                        do {
+                            if mode == Look.flight3D.rawValue {
+                                guard let snapshot = flight.makeSnapshot() else {
+                                    saveNotice = "No active 3D game can be saved. Start a game, then try again before Game Over."
+                                    return
+                                }
+                                try Flight3DStore.saveChecked(snapshot)
+                                saveNotice = "3D Flight saved successfully. Wave \(snapshot.wave), \(snapshot.score) points. Choose Resume to load it."
+                            } else {
+                                guard let snapshot = game.makeSnapshot(activePresetID: activePresetID) else {
+                                    saveNotice = "No active game can be saved. Press Return to start a game before selecting Save Game."
+                                    return
+                                }
+                                let slot = try GameStore.saveGameChecked(snapshot)
+                                saveNotice = "Game saved: \(slot.name). Choose Resume to load it."
                             }
-                        } else if let snapshot = game.makeSnapshot(activePresetID: activePresetID) {
-                            _ = GameStore.saveGame(snapshot)
+                        } catch {
+                            saveNotice = "Save failed: \(error.localizedDescription). Your previous saves were not intentionally deleted."
                         }
                     }
                     Button("Resume") {
-                        savedGames = GameStore.saves()
-                        saved3DGames = Flight3DStore.saves()
-                        showSavedGames = true
+                        do {
+                            savedGames = try GameStore.savesChecked()
+                            saved3DGames = try Flight3DStore.savesChecked()
+                            showSavedGames = true
+                        } catch {
+                            saveNotice = "Unable to read saved games: \(error.localizedDescription). Existing save files were left unchanged."
+                        }
                     }
                     Toggle("Sound", isOn: $soundEnabled)
                         .toggleStyle(.checkbox)
@@ -314,6 +332,14 @@ private struct GameWindow: View {
                 }
             }
         }
+        .alert("VECTOR DRIFT SAVE GAME", isPresented: Binding(
+            get: { saveNotice != nil },
+            set: { if !$0 { saveNotice = nil } }
+        )) {
+            Button("OK") { saveNotice = nil }
+        } message: {
+            Text(saveNotice ?? "")
+        }
         .onChange(of: soundEnabled) {
             ArcadeAudio.shared.enabled = $0
             flight.soundEnabled = $0
@@ -347,7 +373,11 @@ private struct GameWindow: View {
                                 difficulty = slot.snapshot.difficulty
                                 activePresetID = ""
                                 let snapshot = slot.snapshot
-                                DispatchQueue.main.async { flight.restore(snapshot) }
+                                restoringSavedGame = true
+                                DispatchQueue.main.async {
+                                    flight.restore(snapshot)
+                                    DispatchQueue.main.async { restoringSavedGame = false }
+                                }
                                 showSavedGames = false
                             }
                             Button("Delete", role: .destructive) {
@@ -370,7 +400,11 @@ private struct GameWindow: View {
                                 difficulty = snapshot.difficulty
                                 activePresetID = snapshot.activePresetID
                                 // Allow SwiftUI's difficulty change handler to finish first.
-                                DispatchQueue.main.async { game.restore(snapshot) }
+                                restoringSavedGame = true
+                                DispatchQueue.main.async {
+                                    game.restore(snapshot)
+                                    DispatchQueue.main.async { restoringSavedGame = false }
+                                }
                                 showSavedGames = false
                             }
                             Button("Delete", role: .destructive) {
@@ -437,10 +471,12 @@ private struct GameWindow: View {
             .frame(minWidth: 360)
         }
         .onChange(of: mode) { value in
+            if restoringSavedGame { return }
             game.modern = value == Look.modern.rawValue
             if value == Look.flight3D.rawValue { game.clearKeys() }
         }
         .onChange(of: difficulty) { value in
+            if restoringSavedGame { return }
             game.difficulty = Difficulty(rawValue: value) ?? .medium
             flight.difficulty = value
             activePresetID = ""
