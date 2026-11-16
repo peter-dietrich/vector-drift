@@ -366,16 +366,33 @@ enum GameStore {
     }
 
     @discardableResult
-    static func saveGameChecked(_ snapshot: GameSnapshot) throws -> GameSaveSlot {
+    static func defaultName(for snapshot: GameSnapshot) -> String {
+        "Wave \(snapshot.wave) · \(snapshot.customRules == nil ? snapshot.difficulty.capitalized : "Custom") · \(snapshot.score) points"
+    }
+
+    static func saveGameChecked(_ snapshot: GameSnapshot, name: String) throws -> GameSaveSlot {
+        let label = String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(60))
+        guard !label.isEmpty else { throw CocoaError(.fileWriteInvalidFileName) }
         let slot = GameSaveSlot(
             id: UUID().uuidString,
-            name: "Wave \(snapshot.wave) · \(snapshot.customRules == nil ? snapshot.difficulty.capitalized : "Custom") · \(snapshot.score) points",
+            name: label,
             savedAt: Date(), snapshot: snapshot
         )
         var list = try savesChecked()
         list.insert(slot, at: 0)
         try ReliableGameSaveStorage.write(Array(list.prefix(12)), for: savesKey)
         return slot
+    }
+
+    static func renameGame(id: String, to newName: String) throws {
+        let label = String(newName.trimmingCharacters(in: .whitespacesAndNewlines).prefix(60))
+        guard !label.isEmpty else { throw CocoaError(.fileWriteInvalidFileName) }
+        var entries = try savesChecked()
+        guard let index = entries.firstIndex(where: { $0.id == id }) else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+        entries[index].name = label
+        try ReliableGameSaveStorage.write(entries, for: savesKey)
     }
 
     static func deleteGame(id: String) {

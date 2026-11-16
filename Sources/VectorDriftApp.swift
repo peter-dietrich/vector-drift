@@ -163,6 +163,12 @@ private struct GameWindow: View {
     @State private var showPreferences = false
     @State private var showSavedGames = false
     @State private var saveNotice: String?
+    @State private var showingSaveName = false
+    @State private var saveNameDraft = ""
+    @State private var pending2DSave: GameSnapshot?
+    @State private var pending3DSave: Flight3DSnapshot?
+    @State private var renameSaveID: String?
+    @State private var renameNameDraft = ""
     @State private var restoringSavedGame = false
     @State private var showRecordInitials = false
     @State private var recordInitials = ""
@@ -198,25 +204,26 @@ private struct GameWindow: View {
                     Spacer()
                     Button("Custom Game") { showPreferences = true }
                     Button("Save Game") {
-                        do {
-                            if mode == Look.flight3D.rawValue {
-                                guard let snapshot = flight.makeSnapshot() else {
-                                    saveNotice = "No active 3D game can be saved. Start a game, then try again before Game Over."
-                                    return
-                                }
-                                try Flight3DStore.saveChecked(snapshot)
-                                saveNotice = "3D Flight saved successfully. Wave \(snapshot.wave), \(snapshot.score) points. Choose Resume to load it."
-                            } else {
-                                guard let snapshot = game.makeSnapshot(activePresetID: activePresetID) else {
-                                    saveNotice = "No active game can be saved. Press Return to start a game before selecting Save Game."
-                                    return
-                                }
-                                let slot = try GameStore.saveGameChecked(snapshot)
-                                saveNotice = "Game saved: \(slot.name). Choose Resume to load it."
+                        // Capture the actual gameplay state *before* showing the
+                        // name dialog. Cancel never writes a new save.
+                        if mode == Look.flight3D.rawValue {
+                            guard let snapshot = flight.makeSnapshot() else {
+                                saveNotice = "No active 3D game can be saved. Start playing before selecting Save Game."
+                                return
                             }
-                        } catch {
-                            saveNotice = "Save failed: \(error.localizedDescription). Your previous saves were not intentionally deleted."
+                            pending3DSave = snapshot
+                            pending2DSave = nil
+                            saveNameDraft = Flight3DStore.defaultName(for: snapshot)
+                        } else {
+                            guard let snapshot = game.makeSnapshot(activePresetID: activePresetID) else {
+                                saveNotice = "No active game can be saved. Press Return to start playing before selecting Save Game."
+                                return
+                            }
+                            pending2DSave = snapshot
+                            pending3DSave = nil
+                            saveNameDraft = GameStore.defaultName(for: snapshot)
                         }
+                        showingSaveName = true
                     }
                     Button("Resume") {
                         do {
@@ -344,6 +351,29 @@ private struct GameWindow: View {
             ArcadeAudio.shared.enabled = $0
             flight.soundEnabled = $0
         }
+        .sheet(isPresented: $showingSaveName, onDismiss: {
+            pending2DSave = nil
+            pending3DSave = nil
+        }) {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("NAME YOUR SAVED GAME")
+                    .font(.system(size: 20, weight: .heavy, design: .monospaced))
+                Text("Give this checkpoint a memorable name. Your wave, score and date are saved separately.")
+                    .font(.callout).foregroundStyle(.secondary)
+                TextField("Save name", text: $saveNameDraft)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit { commitNamedSave() }
+                HStack {
+                    Button("Cancel", role: .cancel) { showingSaveName = false }
+                    Spacer()
+                    Button("Save Checkpoint") { commitNamedSave() }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(saveNameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            .padding(24)
+            .frame(width: 460)
+        }
         .sheet(isPresented: $showPreferences) {
             GamePresetEditor(baseDifficulty: difficulty, activePresetID: activePresetID) { preset in
                 activePresetID = preset?.id ?? ""
@@ -363,7 +393,8 @@ private struct GameWindow: View {
                     ForEach(saved3DGames) { slot in
                         HStack {
                             VStack(alignment: .leading) {
-                                Text(slot.summary).font(.headline)
+                                Text(slot.name ?? slot.summary).font(.headline)
+                                Text(slot.summary).font(.caption).foregroundStyle(.secondary)
                                 Text(slot.date.formatted()).font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -380,9 +411,22 @@ private struct GameWindow: View {
                                 }
                                 showSavedGames = false
                             }
+                            Button("Rename") {
+                                renameSaveID = slot.id
+                                renameNameDraft = slot.name ?? slot.summary
+                            }
                             Button("Delete", role: .destructive) {
                                 Flight3DStore.delete(id: slot.id)
                                 saved3DGames = Flight3DStore.saves()
+                            }
+                        }
+                        if renameSaveID == slot.id {
+                            HStack {
+                                TextField("Checkpoint name", text: $renameNameDraft)
+                                    .textFieldStyle(.roundedBorder)
+                                Button("Save Name") { rename3DSave(slot.id) }
+                                    .disabled(renameNameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                                Button("Cancel") { renameSaveID = nil }
                             }
                         }
                         Divider()
@@ -391,6 +435,8 @@ private struct GameWindow: View {
                         HStack {
                             VStack(alignment: .leading) {
                                 Text(slot.name).font(.headline)
+                                Text("Wave \(slot.snapshot.wave) · \(slot.snapshot.score) points")
+                                    .font(.caption).foregroundStyle(.secondary)
                                 Text(slot.savedAt.formatted()).font(.caption).foregroundStyle(.secondary)
                             }
                             Spacer()
@@ -407,9 +453,22 @@ private struct GameWindow: View {
                                 }
                                 showSavedGames = false
                             }
+                            Button("Rename") {
+                                renameSaveID = slot.id
+                                renameNameDraft = slot.name
+                            }
                             Button("Delete", role: .destructive) {
                                 GameStore.deleteGame(id: slot.id)
                                 savedGames = GameStore.saves()
+                            }
+                        }
+                        if renameSaveID == slot.id {
+                            HStack {
+                                TextField("Checkpoint name", text: $renameNameDraft)
+                                    .textFieldStyle(.roundedBorder)
+                                Button("Save Name") { rename2DSave(slot.id) }
+                                    .disabled(renameNameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                                Button("Cancel") { renameSaveID = nil }
                             }
                         }
                         Divider()
@@ -417,7 +476,7 @@ private struct GameWindow: View {
                 }
                 Button("Close") { showSavedGames = false }
             }
-            .padding(24).frame(width: 550, height: 450)
+            .padding(24).frame(width: 680, height: 480)
         }
         .sheet(isPresented:$showRecordInitials) {
             VStack(alignment:.leading,spacing:13) {
@@ -485,6 +544,45 @@ private struct GameWindow: View {
             game.refreshDifficultySelection()
         }
     }
+
+    private func commitNamedSave() {
+        let name = String(saveNameDraft.trimmingCharacters(in: .whitespacesAndNewlines).prefix(60))
+        guard !name.isEmpty else { return }
+        do {
+            if let snapshot = pending3DSave {
+                try Flight3DStore.saveChecked(snapshot, name: name)
+            } else if let snapshot = pending2DSave {
+                try GameStore.saveGameChecked(snapshot, name: name)
+            } else {
+                throw CocoaError(.fileReadUnknown)
+            }
+            showingSaveName = false
+            saveNotice = "Checkpoint saved as \"\(name)\". Choose Resume to load it."
+        } catch {
+            saveNotice = "Save failed: \(error.localizedDescription). Existing saves were left unchanged."
+        }
+    }
+
+    private func rename2DSave(_ id: String) {
+        do {
+            try GameStore.renameGame(id: id, to: renameNameDraft)
+            savedGames = try GameStore.savesChecked()
+            renameSaveID = nil
+        } catch {
+            saveNotice = "Rename failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func rename3DSave(_ id: String) {
+        do {
+            try Flight3DStore.rename(id: id, to: renameNameDraft)
+            saved3DGames = try Flight3DStore.savesChecked()
+            renameSaveID = nil
+        } catch {
+            saveNotice = "Rename failed: \(error.localizedDescription)"
+        }
+    }
+
 }
 
 private struct GameView: NSViewRepresentable {
