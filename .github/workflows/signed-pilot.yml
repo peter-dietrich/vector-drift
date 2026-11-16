@@ -1,0 +1,87 @@
+name: Signed Vector Drift pilot (no public Release)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sign-notarize-pilot:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build release candidate
+        run: |
+          set -euo pipefail
+          xcodebuild -project VectorDrift.xcodeproj -scheme VectorDrift -configuration Release \
+            -derivedDataPath "$RUNNER_TEMP/derived" -destination "platform=macOS" \
+            CODE_SIGNING_ALLOWED=NO build
+          test -d "$RUNNER_TEMP/derived/Build/Products/Release/VectorDrift.app"
+
+      - name: Sign with Developer ID and notarize
+        env:
+          APPLE_DEVELOPER_ID_CERT_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_CERT_BASE64 }}
+          APPLE_DEVELOPER_ID_CERT_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_CERT_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for variable in APPLE_DEVELOPER_ID_CERT_BASE64 APPLE_DEVELOPER_ID_CERT_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_TEAM_ID APPLE_APP_SPECIFIC_PASSWORD; do
+            if [[ -z "${!variable:-}" ]]; then
+              echo "::error::Missing required GitHub Actions secret: $variable"
+              exit 1
+            fi
+          done
+
+          KEYCHAIN="$RUNNER_TEMP/pilot.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          trap 'security delete-keychain "$KEYCHAIN" >/dev/null 2>&1 || true; rm -f "$RUNNER_TEMP/developer-id.p12"' EXIT
+          printf "%s" "$APPLE_DEVELOPER_ID_CERT_BASE64" | base64 -D > "$RUNNER_TEMP/developer-id.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/developer-id.p12" -k "$KEYCHAIN" \
+            -P "$APPLE_DEVELOPER_ID_CERT_PASSWORD" -T /usr/bin/codesign
+          security list-keychains -d user -s "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+
+          APP="$RUNNER_TEMP/derived/Build/Products/Release/VectorDrift.app"
+          BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print CFBundleIdentifier" "$APP/Contents/Info.plist")
+          if [[ "$BUNDLE_ID" != "io.vectordrift.prototype" ]]; then
+            echo "::error::Unexpected app bundle ID: $BUNDLE_ID"
+            exit 1
+          fi
+          codesign --force --deep --options runtime --timestamp \
+            --sign "$APPLE_SIGNING_IDENTITY" --keychain "$KEYCHAIN" "$APP"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          TEAM_SIGNED=$(codesign --display --verbose=4 "$APP" 2>&1 | sed -n "s/^TeamIdentifier=//p")
+          if [[ "$TEAM_SIGNED" != "$APPLE_TEAM_ID" ]]; then
+            echo "::error::Unexpected signing team: $TEAM_SIGNED"
+            exit 1
+          fi
+
+          ditto -c -k --keepParent "$APP" "$RUNNER_TEMP/notarization.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/notarization.zip" \
+            --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD" --wait \
+            --output-format json > "$RUNNER_TEMP/notary-result.json"
+          python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); s=r.get("status"); print("Apple notary status:",s); sys.exit(0 if s=="Accepted" else 1)' \
+            "$RUNNER_TEMP/notary-result.json"
+          xcrun stapler staple "$APP"
+          xcrun stapler validate "$APP"
+          mkdir -p dist
+          ditto -c -k --keepParent "$APP" "dist/VectorDrift-macOS.zip"
+          (cd dist && shasum -a 256 VectorDrift-macOS.zip > VectorDrift-macOS.zip.sha256)
+
+      - name: Upload signed pilot build (not a GitHub Release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: VectorDrift-signed-pilot
+          path: |
+            dist/VectorDrift-macOS.zip
+            dist/VectorDrift-macOS.zip.sha256
+          retention-days: 7
