@@ -1,6 +1,13 @@
 name: Vector Drift beta signing and controlled prerelease
 
 on:
+  # Single-run publication branch. This trigger is intentionally NOT merged
+  # to main; all normal beta builds remain manually dispatched.
+  push:
+    branches:
+      - ci/publish-v0.14.2-beta.4
+    paths:
+      - .github/workflows/beta-release.yml
   workflow_dispatch:
     inputs:
       beta_version:
@@ -24,7 +31,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate version and build release candidate
         env:
-          BETA_VERSION: ${{ inputs.beta_version }}
+          BETA_VERSION: ${{ github.event_name == 'push' && 'v0.14.2-beta.4' || inputs.beta_version }}
         run: |
           set -euo pipefail
           if [[ ! "$BETA_VERSION" =~ ^v0\.14\.2-beta\.([1-9][0-9]*)$ ]]; then
@@ -32,6 +39,13 @@ jobs:
             exit 1
           fi
           BUILD="${BASH_REMATCH[1]}"
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            [[ "$GITHUB_REF_NAME" == "ci/publish-v0.14.2-beta.4" ]]
+            [[ "$(git rev-parse HEAD^)" == "ee62db749c0d638b7223b9edbdd8d73a842b04bb" ]] || {
+              echo "::error::Unexpected parent: aborting one-time beta4 publication."
+              exit 1
+            }
+          fi
           xcodebuild -project VectorDrift.xcodeproj -scheme VectorDrift -configuration Release \
             -derivedDataPath "$RUNNER_TEMP/derived" -destination "platform=macOS" \
             CODE_SIGNING_ALLOWED=NO \
@@ -121,10 +135,10 @@ jobs:
           retention-days: 7
 
       - name: Publish PUBLIC GitHub beta release (explicit opt-in only)
-        if: ${{ inputs.publish_prerelease }}
+        if: ${{ github.event_name == 'push' || inputs.publish_prerelease }}
         env:
           GH_TOKEN: ${{ github.token }}
-          BETA_VERSION: ${{ inputs.beta_version }}
+          BETA_VERSION: ${{ github.event_name == 'push' && 'v0.14.2-beta.4' || inputs.beta_version }}
         run: |
           set -euo pipefail
           gh release create "$BETA_VERSION" \
