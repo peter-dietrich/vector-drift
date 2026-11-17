@@ -29,6 +29,8 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Validate version and build release candidate
         env:
           BETA_VERSION: ${{ github.event_name == 'push' && 'v0.14.2-beta.4' || inputs.beta_version }}
@@ -41,8 +43,13 @@ jobs:
           BUILD="${BASH_REMATCH[1]}"
           if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
             [[ "$GITHUB_REF_NAME" == "ci/publish-v0.14.2-beta.4" ]]
-            [[ "$(git rev-parse HEAD^)" == "ee62db749c0d638b7223b9edbdd8d73a842b04bb" ]] || {
-              echo "::error::Unexpected parent: aborting one-time beta4 publication."
+            git merge-base --is-ancestor "ee62db749c0d638b7223b9edbdd8d73a842b04bb" HEAD || {
+              echo "::error::Original validated main commit is not an ancestor: aborting."
+              exit 1
+            }
+            CHANGED="$(git diff --name-only ee62db749c0d638b7223b9edbdd8d73a842b04bb HEAD)"
+            [[ "$CHANGED" == ".github/workflows/beta-release.yml" ]] || {
+              echo "::error::Unexpected source changes on beta4 branch: aborting."
               exit 1
             }
           fi
