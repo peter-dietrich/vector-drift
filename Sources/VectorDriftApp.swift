@@ -155,13 +155,21 @@ fileprivate enum Difficulty: String, CaseIterable, Identifiable {
     }
 }
 
+/// Present save slots using an item that already contains the loaded data.
+/// This avoids a first-open SwiftUI sheet displaying stale empty @State arrays.
+private struct SavedGameSheetState: Identifiable {
+    let id = UUID()
+    var twoD: [GameSaveSlot]
+    var threeD: [Flight3DSaveSlot]
+}
+
 private struct GameWindow: View {
     @AppStorage("visualMode") private var mode = Look.classic.rawValue
     @AppStorage("difficulty") private var difficulty = Difficulty.medium.rawValue
     @AppStorage("soundEnabled") private var soundEnabled = true
     @State private var showScores = false
     @State private var showPreferences = false
-    @State private var showSavedGames = false
+    @State private var savedGameSheet: SavedGameSheetState?
     @State private var saveNotice: String?
     @State private var showingSaveName = false
     @State private var saveNameDraft = ""
@@ -174,8 +182,6 @@ private struct GameWindow: View {
     @State private var recordInitials = ""
     @State private var pendingRecordScore = 0
     @State private var activePresetID = ""
-    @State private var savedGames: [GameSaveSlot] = []
-    @State private var saved3DGames: [Flight3DSaveSlot] = []
     @State private var flight = Flight3DGame()
     @State private var game: DriftScene = {
         let scene = DriftScene(size: CGSize(width: 1080, height: 670))
@@ -234,9 +240,13 @@ private struct GameWindow: View {
                     }
                     Button("Resume") {
                         do {
-                            savedGames = try GameStore.savesChecked()
-                            saved3DGames = try Flight3DStore.savesChecked()
-                            showSavedGames = true
+                            // Load *before* presenting so the first sheet frame
+                            // is populated; do not depend on simultaneous @State
+                            // array and isPresented changes in SwiftUI.
+                            let twoD = try GameStore.savesChecked()
+                            let threeD = try Flight3DStore.savesChecked()
+                            renameSaveID = nil
+                            savedGameSheet = SavedGameSheetState(twoD: twoD, threeD: threeD)
                         } catch {
                             saveNotice = "Unable to read saved games: \(error.localizedDescription). Existing save files were left unchanged."
                         }
@@ -389,15 +399,19 @@ private struct GameWindow: View {
                 game.restart()
             }
         }
-        .sheet(isPresented: $showSavedGames) {
+        .sheet(item: $savedGameSheet) { presented in
             VStack(alignment: .leading, spacing: 12) {
+                // Use the populated item on first display. Rename/delete
+                // refresh the same identifiable payload without reopening.
+                let twoD = savedGameSheet?.twoD ?? presented.twoD
+                let threeD = savedGameSheet?.threeD ?? presented.threeD
                 Text("SAVED GAMES").font(.title2.monospaced().bold())
-                if savedGames.isEmpty && saved3DGames.isEmpty {
+                if twoD.isEmpty && threeD.isEmpty {
                     Text("No saved games yet. Start playing, then choose Save Game.")
                         .foregroundStyle(.secondary)
                 }
                 ScrollView {
-                    ForEach(saved3DGames) { slot in
+                    ForEach(threeD) { slot in
                         HStack {
                             VStack(alignment: .leading) {
                                 Text(slot.name ?? slot.summary).font(.headline)
@@ -416,7 +430,7 @@ private struct GameWindow: View {
                                     flight.restore(snapshot)
                                     DispatchQueue.main.async { restoringSavedGame = false }
                                 }
-                                showSavedGames = false
+                                savedGameSheet = nil
                             }
                             Button("Rename") {
                                 renameSaveID = slot.id
@@ -424,7 +438,7 @@ private struct GameWindow: View {
                             }
                             Button("Delete", role: .destructive) {
                                 Flight3DStore.delete(id: slot.id)
-                                saved3DGames = Flight3DStore.saves()
+                                savedGameSheet?.threeD = Flight3DStore.saves()
                             }
                         }
                         if renameSaveID == slot.id {
@@ -438,7 +452,7 @@ private struct GameWindow: View {
                         }
                         Divider()
                     }
-                    ForEach(savedGames) { slot in
+                    ForEach(twoD) { slot in
                         HStack {
                             VStack(alignment: .leading) {
                                 Text(slot.name).font(.headline)
@@ -458,7 +472,7 @@ private struct GameWindow: View {
                                     game.restore(snapshot)
                                     DispatchQueue.main.async { restoringSavedGame = false }
                                 }
-                                showSavedGames = false
+                                savedGameSheet = nil
                             }
                             Button("Rename") {
                                 renameSaveID = slot.id
@@ -466,7 +480,7 @@ private struct GameWindow: View {
                             }
                             Button("Delete", role: .destructive) {
                                 GameStore.deleteGame(id: slot.id)
-                                savedGames = GameStore.saves()
+                                savedGameSheet?.twoD = GameStore.saves()
                             }
                         }
                         if renameSaveID == slot.id {
@@ -481,7 +495,7 @@ private struct GameWindow: View {
                         Divider()
                     }
                 }
-                Button("Close") { showSavedGames = false }
+                Button("Close") { savedGameSheet = nil }
             }
             .padding(24).frame(width: 680, height: 480)
         }
@@ -573,7 +587,7 @@ private struct GameWindow: View {
     private func rename2DSave(_ id: String) {
         do {
             try GameStore.renameGame(id: id, to: renameNameDraft)
-            savedGames = try GameStore.savesChecked()
+            savedGameSheet?.twoD = try GameStore.savesChecked()
             renameSaveID = nil
         } catch {
             saveNotice = "Rename failed: \(error.localizedDescription)"
@@ -583,7 +597,7 @@ private struct GameWindow: View {
     private func rename3DSave(_ id: String) {
         do {
             try Flight3DStore.rename(id: id, to: renameNameDraft)
-            saved3DGames = try Flight3DStore.savesChecked()
+            savedGameSheet?.threeD = try Flight3DStore.savesChecked()
             renameSaveID = nil
         } catch {
             saveNotice = "Rename failed: \(error.localizedDescription)"
