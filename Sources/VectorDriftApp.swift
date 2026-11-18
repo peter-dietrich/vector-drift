@@ -10,6 +10,7 @@ struct VectorDriftApp: App {
                 .frame(minWidth: 760, minHeight: 540)
         }
         .defaultSize(width: 1080, height: 760)
+        .commands { GameHelpCommands() }
     }
 }
 
