@@ -4,6 +4,7 @@ import SwiftUI
 
 @main
 struct VectorDriftApp: App {
+    @NSApplicationDelegateAdaptor(ArcadeIconAppDelegate.self) private var iconDelegate
     var body: some Scene {
         WindowGroup {
             GameWindow()
